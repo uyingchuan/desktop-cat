@@ -1,19 +1,12 @@
-export type PetAnimationState = 'idle' | 'walking' | 'sleeping' | 'playing';
+export type PetState = 'idle' | 'left_paw' | 'right_paw' | 'wave';
 
-export type PetMood = 'happy' | 'neutral' | 'sleepy';
-
-export interface PetPosition {
-  x: number;
-  y: number;
+export interface PetEvent {
+  type: 'KEY_DOWN' | 'KEY_UP' | 'ALL_KEYS_UP';
+  key?: string;
 }
 
-export interface PetState {
-  position: PetPosition;
-  animationState: PetAnimationState;
-  mood: PetMood;
-}
-
-export type PetAction =
-  | { type: 'SET_POSITION'; x: number; y: number }
-  | { type: 'SET_ANIMATION_STATE'; state: PetAnimationState }
-  | { type: 'SET_MOOD'; mood: PetMood };
+export type StateChangeListener = (
+  prev: PetState,
+  next: PetState,
+  event: PetEvent,
+) => void;
