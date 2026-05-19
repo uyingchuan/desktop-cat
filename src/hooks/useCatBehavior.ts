@@ -103,10 +103,6 @@ export function useCatBehavior() {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    if (walkingRafRef.current) {
-      cancelAnimationFrame(walkingRafRef.current);
-      walkingRafRef.current = null;
-    }
   };
 
   // State machine
