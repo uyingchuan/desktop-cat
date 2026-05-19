@@ -1,8 +1,10 @@
 import { useDrag } from '../hooks/useDrag';
-import catImage from '../assets/cat3.png';
+import { useCatBehavior } from '../hooks/useCatBehavior';
+import CatSprite from './CatSprite';
 
 function Cat() {
   const { handleMouseDown, handleDragStart } = useDrag();
+  useCatBehavior();
 
   return (
     <div
@@ -10,13 +12,7 @@ function Cat() {
       onMouseDown={handleMouseDown}
       onDragStart={handleDragStart}
     >
-      <img
-        src={catImage}
-        alt="Desktop Cat"
-        className="cat-image"
-        draggable={false}
-      />
-      <span className='cart-name'>小猫咪</span>
+      <CatSprite />
     </div>
   );
 }

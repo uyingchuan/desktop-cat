@@ -13,21 +13,14 @@
   cursor: grabbing;
 }
 
-.cat-image {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  pointer-events: none;
-  -webkit-user-drag: none;
-  user-select: none;
-}
-
-.cart-name {
+.cat-name {
   position: absolute;
-  bottom: 15px;
-  left: 30%;
+  bottom: 8px;
+  left: 50%;
   transform: translateX(-50%);
-  font-size: 12px;
-  color: black;
-  text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+  font-size: 11px;
+  color: #333;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  pointer-events: none;
 }
