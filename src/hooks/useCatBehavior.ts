@@ -12,7 +12,7 @@ const IDLE_MAX_MS = 8000;
 const SLEEP_MIN_MS = 5000;
 const SLEEP_MAX_MS = 15000;
 
-// Action durations (ms) before returning to idle
+// 每个动作的持续时间（ms）
 const ACTION_DURATIONS: Record<string, number> = {
   playing: 800,
   floating: 1500,
@@ -20,8 +20,93 @@ const ACTION_DURATIONS: Record<string, number> = {
   attacking: 800,
 };
 
-// Walk-like states that use position animation
+// 需要 RAF 移动窗口的动作
 const MOVE_STATES: PetAnimationState[] = ['walking', 'running'];
+
+interface Transition {
+  state: PetAnimationState;
+  weight: number;
+}
+
+// 状态转移表：每个动作只能转移到特定的后续动作，权重决定概率
+const TRANSITIONS: Record<PetAnimationState, Transition[]> = {
+  idle: [
+    { state: 'idle2', weight: 30 },
+    { state: 'walking', weight: 18 },
+    { state: 'running', weight: 7 },
+    { state: 'sleeping', weight: 15 },
+    { state: 'licking', weight: 15 },
+    { state: 'playing', weight: 5 },
+    { state: 'floating', weight: 5 },
+    { state: 'attacking', weight: 5 },
+  ],
+  idle2: [
+    { state: 'idle', weight: 30 },
+    { state: 'walking', weight: 18 },
+    { state: 'running', weight: 7 },
+    { state: 'sleeping', weight: 15 },
+    { state: 'licking', weight: 15 },
+    { state: 'playing', weight: 5 },
+    { state: 'floating', weight: 5 },
+    { state: 'attacking', weight: 5 },
+  ],
+  walking: [
+    { state: 'idle', weight: 35 },
+    { state: 'idle2', weight: 35 },
+    { state: 'licking', weight: 30 },
+  ],
+  running: [
+    { state: 'idle', weight: 50 },
+    { state: 'idle2', weight: 50 },
+  ],
+  sleeping: [
+    { state: 'idle', weight: 50 },
+    { state: 'idle2', weight: 50 },
+  ],
+  licking: [
+    { state: 'idle', weight: 35 },
+    { state: 'idle2', weight: 35 },
+    { state: 'sleeping', weight: 30 },
+  ],
+  playing: [
+    { state: 'idle', weight: 50 },
+    { state: 'idle2', weight: 50 },
+  ],
+  floating: [
+    { state: 'idle', weight: 50 },
+    { state: 'idle2', weight: 50 },
+  ],
+  attacking: [
+    { state: 'idle', weight: 50 },
+    { state: 'idle2', weight: 50 },
+  ],
+  hurt: [
+    { state: 'idle', weight: 100 },
+  ],
+  dead: [
+    { state: 'idle', weight: 100 },
+  ],
+};
+
+/**
+ * 根据当前状态，从转移表中按权重随机选择下一个状态
+ */
+function pickNext(current: PetAnimationState): PetAnimationState {
+  const transitions = TRANSITIONS[current];
+  if (!transitions || transitions.length === 0) {
+    return 'idle';
+  }
+
+  const totalWeight = transitions.reduce((sum, t) => sum + t.weight, 0);
+  let rand = Math.random() * totalWeight;
+
+  for (const t of transitions) {
+    rand -= t.weight;
+    if (rand <= 0) return t.state;
+  }
+
+  return transitions[transitions.length - 1].state;
+}
 
 export function useCatBehavior() {
   const {
@@ -42,7 +127,7 @@ export function useCatBehavior() {
     positionRef.current = position;
   }, [position]);
 
-  // Position sync: listen for window movement (user drags)
+  // 监听窗口移动（用户拖动），同步位置到 store
   useEffect(() => {
     let unlisten: (() => void) | undefined;
 
@@ -55,7 +140,7 @@ export function useCatBehavior() {
     return () => { unlisten?.(); };
   }, [setPosition]);
 
-  // Get initial position
+  // 获取窗口初始位置
   useEffect(() => {
     appWindow.current.outerPosition().then((pos) => {
       const p = { x: pos.x, y: pos.y };
@@ -82,6 +167,7 @@ export function useCatBehavior() {
     return Math.sqrt(dx * dx + dy * dy);
   };
 
+  // 根据目标距离自动选择 walking 或 running
   const startMoving = (target: PetPosition) => {
     const dist = getDistance(positionRef.current, target);
     const moveState: PetAnimationState = dist >= RUN_DISTANCE_THRESHOLD ? 'running' : 'walking';
@@ -96,8 +182,12 @@ export function useCatBehavior() {
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       if (dist < 3) {
-        const nextIdle = idleVariantRef.current;
-        setAnimationState(nextIdle);
+        // 到达目标，按转移规则选择下一个状态
+        const next = pickNext(moveState);
+        if (next === 'idle' || next === 'idle2') {
+          idleVariantRef.current = next;
+        }
+        setAnimationState(next);
         moveRafRef.current = null;
         return;
       }
@@ -120,82 +210,63 @@ export function useCatBehavior() {
     moveRafRef.current = requestAnimationFrame(animate);
   };
 
-  // Pick a random idle variant
-  const pickIdle = (): 'idle' | 'idle2' => {
-    return Math.random() < 0.5 ? 'idle' : 'idle2';
-  };
-
-  // Schedule next behavior from idle state
-  const scheduleFromIdle = () => {
+  // 从转移表安排下一个行为
+  const scheduleNext = () => {
     const delay = IDLE_MIN_MS + Math.random() * (IDLE_MAX_MS - IDLE_MIN_MS);
     timerRef.current = setTimeout(() => {
-      const rand = Math.random();
-
-      if (rand < 0.40) {
-        // Switch idle variant
-        const next = idleVariantRef.current === 'idle' ? 'idle2' : 'idle';
+      const current = idleVariantRef.current;
+      const next = pickNext(current);
+      if (next === 'idle' || next === 'idle2') {
         idleVariantRef.current = next;
-        setAnimationState(next);
-      } else if (rand < 0.65) {
-        // Walk or run (25%)
+      }
+      if (next === 'walking' || next === 'running') {
         startMoving(generateTarget());
-      } else if (rand < 0.75) {
-        // Sleep (10%)
-        setAnimationState('sleeping');
-      } else if (rand < 0.85) {
-        // Lick (10%)
-        setAnimationState('licking');
-      } else if (rand < 0.90) {
-        // Jump (5%)
-        setAnimationState('playing');
-      } else if (rand < 0.95) {
-        // Float (5%)
-        setAnimationState('floating');
       } else {
-        // Attack (5%)
-        setAnimationState('attacking');
+        setAnimationState(next);
       }
     }, delay);
   };
 
-  // State machine
+  // 状态机
   useEffect(() => {
-    // Clear any pending timeout from previous state
+    // 清除上一状态的定时器
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
 
-    // Idle variants
+    // 待机变体：等待后按转移表选择下一个动作
     if (animationState === 'idle' || animationState === 'idle2') {
       idleVariantRef.current = animationState as 'idle' | 'idle2';
-      scheduleFromIdle();
+      scheduleNext();
       return;
     }
 
-    // Sleeping
+    // 睡眠：到时后按转移表选择
     if (animationState === 'sleeping') {
       const delay = SLEEP_MIN_MS + Math.random() * (SLEEP_MAX_MS - SLEEP_MIN_MS);
       timerRef.current = setTimeout(() => {
-        const next = pickIdle();
-        idleVariantRef.current = next;
+        const next = pickNext('sleeping');
+        idleVariantRef.current = next as 'idle' | 'idle2';
         setAnimationState(next);
       }, delay);
       return;
     }
 
-    // Timed play actions
+    // 有持续时间限制的动作：到时后按转移表选择
     const actionDuration = ACTION_DURATIONS[animationState];
     if (actionDuration) {
       timerRef.current = setTimeout(() => {
-        const next = pickIdle();
-        idleVariantRef.current = next;
+        const next = pickNext(animationState);
+        if (next === 'idle' || next === 'idle2') {
+          idleVariantRef.current = next;
+        }
         setAnimationState(next);
       }, actionDuration);
       return;
     }
 
-    // Movement states: cleanup RAF on exit
+    // 行走/奔跑：退出时取消 RAF
     if (MOVE_STATES.includes(animationState)) {
       return () => {
         if (moveRafRef.current) {
@@ -206,7 +277,7 @@ export function useCatBehavior() {
     }
   }, [animationState]);
 
-  // Cleanup on unmount
+  // 组件卸载时清理
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
