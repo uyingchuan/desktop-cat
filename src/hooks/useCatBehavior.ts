@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { getCurrentWindow, LogicalPosition } from '@tauri-apps/api/window';
+import { listen } from '@tauri-apps/api/event';
 import { usePetStore } from '../stores/usePetStore';
-import type { PetAnimationState, PetPosition } from '../types/pet';
+import type { PetAnimationState, PetPosition, Personality } from '../types/pet';
 
 const SCREEN_PADDING = 50;
 const WALK_SPEED = 80;
@@ -12,7 +13,6 @@ const IDLE_MAX_MS = 8000;
 const SLEEP_MIN_MS = 5000;
 const SLEEP_MAX_MS = 15000;
 
-// 每个动作的持续时间（ms）
 const ACTION_DURATIONS: Record<string, number> = {
   playing: 800,
   floating: 1500,
@@ -20,7 +20,6 @@ const ACTION_DURATIONS: Record<string, number> = {
   attacking: 800,
 };
 
-// 需要 RAF 移动窗口的动作
 const MOVE_STATES: PetAnimationState[] = ['walking', 'running'];
 
 interface Transition {
@@ -28,27 +27,29 @@ interface Transition {
   weight: number;
 }
 
-// 状态转移表：每个动作只能转移到特定的后续动作，权重决定概率
-const TRANSITIONS: Record<PetAnimationState, Transition[]> = {
+type TransitionTable = Record<PetAnimationState, Transition[]>;
+
+// 慵懒性格：安静、爱舔毛、爱睡觉、少动
+const CALM_TRANSITIONS: TransitionTable = {
   idle: [
     { state: 'idle2', weight: 30 },
-    { state: 'walking', weight: 18 },
-    { state: 'running', weight: 7 },
-    { state: 'sleeping', weight: 15 },
-    { state: 'licking', weight: 15 },
-    { state: 'playing', weight: 5 },
-    { state: 'floating', weight: 5 },
-    { state: 'attacking', weight: 5 },
+    { state: 'walking', weight: 15 },
+    { state: 'running', weight: 5 },
+    { state: 'sleeping', weight: 20 },
+    { state: 'licking', weight: 18 },
+    { state: 'playing', weight: 4 },
+    { state: 'floating', weight: 4 },
+    { state: 'attacking', weight: 4 },
   ],
   idle2: [
     { state: 'idle', weight: 30 },
-    { state: 'walking', weight: 18 },
-    { state: 'running', weight: 7 },
-    { state: 'sleeping', weight: 15 },
-    { state: 'licking', weight: 15 },
-    { state: 'playing', weight: 5 },
-    { state: 'floating', weight: 5 },
-    { state: 'attacking', weight: 5 },
+    { state: 'walking', weight: 15 },
+    { state: 'running', weight: 5 },
+    { state: 'sleeping', weight: 20 },
+    { state: 'licking', weight: 18 },
+    { state: 'playing', weight: 4 },
+    { state: 'floating', weight: 4 },
+    { state: 'attacking', weight: 4 },
   ],
   walking: [
     { state: 'idle', weight: 35 },
@@ -64,9 +65,9 @@ const TRANSITIONS: Record<PetAnimationState, Transition[]> = {
     { state: 'idle2', weight: 50 },
   ],
   licking: [
-    { state: 'idle', weight: 35 },
-    { state: 'idle2', weight: 35 },
-    { state: 'sleeping', weight: 30 },
+    { state: 'idle', weight: 30 },
+    { state: 'idle2', weight: 30 },
+    { state: 'sleeping', weight: 40 },
   ],
   playing: [
     { state: 'idle', weight: 50 },
@@ -88,11 +89,79 @@ const TRANSITIONS: Record<PetAnimationState, Transition[]> = {
   ],
 };
 
-/**
- * 根据当前状态，从转移表中按权重随机选择下一个状态
- */
-function pickNext(current: PetAnimationState): PetAnimationState {
-  const transitions = TRANSITIONS[current];
+// 活泼性格：好动、爱跑爱跳、不爱睡觉
+const ACTIVE_TRANSITIONS: TransitionTable = {
+  idle: [
+    { state: 'idle2', weight: 20 },
+    { state: 'walking', weight: 25 },
+    { state: 'running', weight: 15 },
+    { state: 'sleeping', weight: 5 },
+    { state: 'licking', weight: 10 },
+    { state: 'playing', weight: 10 },
+    { state: 'floating', weight: 8 },
+    { state: 'attacking', weight: 7 },
+  ],
+  idle2: [
+    { state: 'idle', weight: 20 },
+    { state: 'walking', weight: 25 },
+    { state: 'running', weight: 15 },
+    { state: 'sleeping', weight: 5 },
+    { state: 'licking', weight: 10 },
+    { state: 'playing', weight: 10 },
+    { state: 'floating', weight: 8 },
+    { state: 'attacking', weight: 7 },
+  ],
+  walking: [
+    { state: 'idle', weight: 30 },
+    { state: 'idle2', weight: 30 },
+    { state: 'licking', weight: 15 },
+    { state: 'playing', weight: 10 },
+    { state: 'floating', weight: 10 },
+    { state: 'attacking', weight: 5 },
+  ],
+  running: [
+    { state: 'idle', weight: 40 },
+    { state: 'idle2', weight: 40 },
+    { state: 'playing', weight: 10 },
+    { state: 'attacking', weight: 10 },
+  ],
+  sleeping: [
+    { state: 'idle', weight: 50 },
+    { state: 'idle2', weight: 50 },
+  ],
+  licking: [
+    { state: 'idle', weight: 35 },
+    { state: 'idle2', weight: 35 },
+    { state: 'sleeping', weight: 30 },
+  ],
+  playing: [
+    { state: 'idle', weight: 40 },
+    { state: 'idle2', weight: 40 },
+    { state: 'walking', weight: 10 },
+    { state: 'running', weight: 10 },
+  ],
+  floating: [
+    { state: 'idle', weight: 40 },
+    { state: 'idle2', weight: 40 },
+    { state: 'walking', weight: 10 },
+    { state: 'running', weight: 10 },
+  ],
+  attacking: [
+    { state: 'idle', weight: 40 },
+    { state: 'idle2', weight: 40 },
+    { state: 'walking', weight: 10 },
+    { state: 'running', weight: 10 },
+  ],
+  hurt: [
+    { state: 'idle', weight: 100 },
+  ],
+  dead: [
+    { state: 'idle', weight: 100 },
+  ],
+};
+
+function pickNext(current: PetAnimationState, table: TransitionTable): PetAnimationState {
+  const transitions = table[current];
   if (!transitions || transitions.length === 0) {
     return 'idle';
   }
@@ -112,10 +181,25 @@ export function useCatBehavior() {
   const {
     animationState,
     position,
+    personality,
     setPosition,
     setAnimationState,
     setFacingDirection,
+    setPersonality,
   } = usePetStore();
+
+  // 根据当前性格选择权重表
+  const tableRef = useRef<TransitionTable>(
+    personality === 'active' ? ACTIVE_TRANSITIONS : CALM_TRANSITIONS
+  );
+  const personalityRef = useRef<Personality>(personality);
+
+  useEffect(() => {
+    personalityRef.current = personality;
+    tableRef.current = personality === 'active' ? ACTIVE_TRANSITIONS : CALM_TRANSITIONS;
+  }, [personality]);
+
+  const pick = (current: PetAnimationState) => pickNext(current, tableRef.current);
 
   const positionRef = useRef<PetPosition>(position);
   const moveRafRef = useRef<number | null>(null);
@@ -123,11 +207,20 @@ export function useCatBehavior() {
   const idleVariantRef = useRef<'idle' | 'idle2'>('idle');
   const appWindow = useRef(getCurrentWindow());
 
+  // 监听来自 Rust 托盘菜单的性格切换事件
+  useEffect(() => {
+    const unlisten = listen<string>('personality-changed', (event) => {
+      const p = event.payload as Personality;
+      setPersonality(p);
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, [setPersonality]);
+
   useEffect(() => {
     positionRef.current = position;
   }, [position]);
 
-  // 监听窗口移动（用户拖动），同步位置到 store
+  // 监听窗口移动（用户拖动）
   useEffect(() => {
     let unlisten: (() => void) | undefined;
 
@@ -167,7 +260,6 @@ export function useCatBehavior() {
     return Math.sqrt(dx * dx + dy * dy);
   };
 
-  // 根据目标距离自动选择 walking 或 running
   const startMoving = (target: PetPosition) => {
     const dist = getDistance(positionRef.current, target);
     const moveState: PetAnimationState = dist >= RUN_DISTANCE_THRESHOLD ? 'running' : 'walking';
@@ -182,8 +274,7 @@ export function useCatBehavior() {
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       if (dist < 3) {
-        // 到达目标，按转移规则选择下一个状态
-        const next = pickNext(moveState);
+        const next = pick(moveState);
         if (next === 'idle' || next === 'idle2') {
           idleVariantRef.current = next;
         }
@@ -210,12 +301,11 @@ export function useCatBehavior() {
     moveRafRef.current = requestAnimationFrame(animate);
   };
 
-  // 从转移表安排下一个行为
   const scheduleNext = () => {
     const delay = IDLE_MIN_MS + Math.random() * (IDLE_MAX_MS - IDLE_MIN_MS);
     timerRef.current = setTimeout(() => {
       const current = idleVariantRef.current;
-      const next = pickNext(current);
+      const next = pick(current);
       if (next === 'idle' || next === 'idle2') {
         idleVariantRef.current = next;
       }
@@ -229,35 +319,31 @@ export function useCatBehavior() {
 
   // 状态机
   useEffect(() => {
-    // 清除上一状态的定时器
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
 
-    // 待机变体：等待后按转移表选择下一个动作
     if (animationState === 'idle' || animationState === 'idle2') {
       idleVariantRef.current = animationState as 'idle' | 'idle2';
       scheduleNext();
       return;
     }
 
-    // 睡眠：到时后按转移表选择
     if (animationState === 'sleeping') {
       const delay = SLEEP_MIN_MS + Math.random() * (SLEEP_MAX_MS - SLEEP_MIN_MS);
       timerRef.current = setTimeout(() => {
-        const next = pickNext('sleeping');
+        const next = pick('sleeping');
         idleVariantRef.current = next as 'idle' | 'idle2';
         setAnimationState(next);
       }, delay);
       return;
     }
 
-    // 有持续时间限制的动作：到时后按转移表选择
     const actionDuration = ACTION_DURATIONS[animationState];
     if (actionDuration) {
       timerRef.current = setTimeout(() => {
-        const next = pickNext(animationState);
+        const next = pick(animationState);
         if (next === 'idle' || next === 'idle2') {
           idleVariantRef.current = next;
         }
@@ -266,7 +352,6 @@ export function useCatBehavior() {
       return;
     }
 
-    // 行走/奔跑：退出时取消 RAF
     if (MOVE_STATES.includes(animationState)) {
       return () => {
         if (moveRafRef.current) {
@@ -277,7 +362,6 @@ export function useCatBehavior() {
     }
   }, [animationState]);
 
-  // 组件卸载时清理
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);

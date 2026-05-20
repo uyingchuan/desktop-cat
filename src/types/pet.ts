@@ -1,3 +1,5 @@
+export type Personality = 'calm' | 'active';
+
 export type PetAnimationState =
   | 'idle' | 'idle2'
   | 'walking' | 'running'
@@ -23,10 +25,12 @@ export interface PetState {
   animationState: PetAnimationState;
   mood: PetMood;
   facingDirection: FacingDirection;
+  personality: Personality;
 }
 
 export type PetAction =
   | { type: 'SET_POSITION'; x: number; y: number }
   | { type: 'SET_ANIMATION_STATE'; state: PetAnimationState }
   | { type: 'SET_MOOD'; mood: PetMood }
-  | { type: 'SET_FACING_DIRECTION'; direction: FacingDirection };
+  | { type: 'SET_FACING_DIRECTION'; direction: FacingDirection }
+  | { type: 'SET_PERSONALITY'; personality: Personality };
