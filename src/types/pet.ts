@@ -1,4 +1,13 @@
-export type PetAnimationState = 'idle' | 'walking' | 'sleeping' | 'playing';
+export type PetAnimationState =
+  | 'idle' | 'idle2'
+  | 'walking' | 'running'
+  | 'sleeping'
+  | 'playing'
+  | 'floating'
+  | 'licking'
+  | 'attacking'
+  | 'hurt'
+  | 'dead';
 
 export type PetMood = 'happy' | 'neutral' | 'sleepy';
 

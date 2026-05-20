@@ -1,17 +1,14 @@
-@keyframes sprite-idle {
-  from { background-position-x: 0px; }
-  to   { background-position-x: -256px; }
-}
-
-@keyframes sprite-walk {
-  from { background-position-x: 0px; }
-  to   { background-position-x: -224px; }
-}
-
-@keyframes sprite-jump {
-  from { background-position-x: 0px; }
-  to   { background-position-x: -128px; }
-}
+@keyframes sprite-idle  { from { background-position-x: 0px; } to { background-position-x: -256px; } }
+@keyframes sprite-idle2 { from { background-position-x: 0px; } to { background-position-x: -224px; } }
+@keyframes sprite-walk  { from { background-position-x: 0px; } to { background-position-x: -224px; } }
+@keyframes sprite-run   { from { background-position-x: 0px; } to { background-position-x: -192px; } }
+@keyframes sprite-jump  { from { background-position-x: 0px; } to { background-position-x: -128px; } }
+@keyframes sprite-float { from { background-position-x: 0px; } to { background-position-x: -320px; } }
+@keyframes sprite-sleep { from { background-position-x: 0px; } to { background-position-x: -288px; } }
+@keyframes sprite-lick  { from { background-position-x: 0px; } to { background-position-x: -416px; } }
+@keyframes sprite-attack{ from { background-position-x: 0px; } to { background-position-x: -192px; } }
+@keyframes sprite-hurt  { from { background-position-x: 0px; } to { background-position-x: -128px; } }
+@keyframes sprite-dead  { from { background-position-x: 0px; } to { background-position-x: -384px; } }
 
 .cat-sprite {
   width: 32px;
@@ -27,18 +24,14 @@
   -webkit-user-drag: none;
 }
 
-.sprite-idle {
-  animation: sprite-idle 1.6s steps(8, end) infinite;
-}
-
-.sprite-walking {
-  animation: sprite-walk 0.7s steps(7, end) infinite;
-}
-
-.sprite-playing {
-  animation: sprite-jump 0.5s steps(4, end) infinite;
-}
-
-.sprite-sleeping {
-  animation: sprite-idle 4s steps(8, end) infinite;
-}
+.sprite-idle      { animation: sprite-idle  1.6s steps(8,  end) infinite; }
+.sprite-idle2     { animation: sprite-idle2 1.4s steps(7,  end) infinite; }
+.sprite-walking   { animation: sprite-walk  0.7s steps(7,  end) infinite; }
+.sprite-running   { animation: sprite-run   0.4s steps(6,  end) infinite; }
+.sprite-sleeping  { animation: sprite-sleep 3.6s steps(9,  end) infinite; }
+.sprite-playing   { animation: sprite-jump  0.5s steps(4,  end) infinite; }
+.sprite-floating  { animation: sprite-float 1.2s steps(10, end) infinite; }
+.sprite-licking   { animation: sprite-lick  2.0s steps(13, end) infinite; }
+.sprite-attacking { animation: sprite-attack 0.5s steps(6, end) infinite; }
+.sprite-hurt      { animation: sprite-hurt  0.6s steps(4,  end) infinite; }
+.sprite-dead      { animation: sprite-dead  2.0s steps(12, end) infinite; }
