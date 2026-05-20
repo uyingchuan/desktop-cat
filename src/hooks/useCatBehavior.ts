@@ -274,12 +274,8 @@ export function useCatBehavior() {
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       if (dist < 3) {
-        const next = pick(moveState);
-        if (next === 'idle' || next === 'idle2') {
-          idleVariantRef.current = next;
-        }
-        setAnimationState(next);
         moveRafRef.current = null;
+        transitionTo(pick(moveState));
         return;
       }
 
@@ -301,19 +297,22 @@ export function useCatBehavior() {
     moveRafRef.current = requestAnimationFrame(animate);
   };
 
+  // 统一的状态切换入口：自动判断是否需要 startMoving
+  const transitionTo = (next: PetAnimationState) => {
+    if (next === 'idle' || next === 'idle2') {
+      idleVariantRef.current = next;
+    }
+    if (next === 'walking' || next === 'running') {
+      startMoving(generateTarget());
+    } else {
+      setAnimationState(next);
+    }
+  };
+
   const scheduleNext = () => {
     const delay = IDLE_MIN_MS + Math.random() * (IDLE_MAX_MS - IDLE_MIN_MS);
     timerRef.current = setTimeout(() => {
-      const current = idleVariantRef.current;
-      const next = pick(current);
-      if (next === 'idle' || next === 'idle2') {
-        idleVariantRef.current = next;
-      }
-      if (next === 'walking' || next === 'running') {
-        startMoving(generateTarget());
-      } else {
-        setAnimationState(next);
-      }
+      transitionTo(pick(idleVariantRef.current));
     }, delay);
   };
 
@@ -333,9 +332,7 @@ export function useCatBehavior() {
     if (animationState === 'sleeping') {
       const delay = SLEEP_MIN_MS + Math.random() * (SLEEP_MAX_MS - SLEEP_MIN_MS);
       timerRef.current = setTimeout(() => {
-        const next = pick('sleeping');
-        idleVariantRef.current = next as 'idle' | 'idle2';
-        setAnimationState(next);
+        transitionTo(pick('sleeping'));
       }, delay);
       return;
     }
@@ -343,11 +340,7 @@ export function useCatBehavior() {
     const actionDuration = ACTION_DURATIONS[animationState];
     if (actionDuration) {
       timerRef.current = setTimeout(() => {
-        const next = pick(animationState);
-        if (next === 'idle' || next === 'idle2') {
-          idleVariantRef.current = next;
-        }
-        setAnimationState(next);
+        transitionTo(pick(animationState));
       }, actionDuration);
       return;
     }
