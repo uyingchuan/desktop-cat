@@ -9,6 +9,12 @@
     "core:default",
     "core:window:allow-start-dragging",
     "core:window:allow-set-position",
-    "core:window:allow-outer-position"
+    "core:window:allow-outer-position",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-is-visible",
+    "core:tray:allow-new",
+    "core:tray:allow-set-menu",
+    "core:tray:allow-set-icon"
   ]
 }
