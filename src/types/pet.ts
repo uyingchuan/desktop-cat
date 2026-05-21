@@ -44,6 +44,7 @@ export interface PetState {
   facingDirection: FacingDirection;
   personality: Personality;
   personalityParams: PersonalityParams;
+  speech: string | null;
 }
 
 export type PetAction =

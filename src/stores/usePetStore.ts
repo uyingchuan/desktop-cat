@@ -9,6 +9,7 @@ interface PetStoreActions {
   setFacingDirection: (direction: FacingDirection) => void;
   setPersonality: (personality: Personality) => void;
   setPersonalityParams: (params: PersonalityParams) => void;
+  setSpeech: (speech: string | null) => void;
 }
 
 type PetStore = PetState & PetStoreActions;
@@ -20,6 +21,7 @@ export const usePetStore = create<PetStore>((set) => ({
   facingDirection: 'left',
   personality: 'calm',
   personalityParams: BUILTIN_PARAMS.calm,
+  speech: null,
 
   setPosition: (x, y) => set({ position: { x, y } }),
   setAnimationState: (animationState) => set({ animationState }),
@@ -27,4 +29,5 @@ export const usePetStore = create<PetStore>((set) => ({
   setFacingDirection: (facingDirection) => set({ facingDirection }),
   setPersonality: (personality) => set({ personality }),
   setPersonalityParams: (personalityParams) => set({ personalityParams }),
+  setSpeech: (speech) => set({ speech }),
 }));

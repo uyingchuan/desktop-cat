@@ -66,7 +66,6 @@ function paramsToTransitionTable(p: PersonalityParams): TransitionTable {
     { state: 'floating', weight: flt },
     { state: 'attacking', weight: atk },
   ];
-  console.log(idleActions, idle2Actions);
 
   // 活跃度高 → 走动后可能继续玩；否则走完就回 idle
   const walkConclusion: Transition[] = p.activity > 50
@@ -158,6 +157,7 @@ export function useCatBehavior() {
     setFacingDirection,
     setPersonality,
     setPersonalityParams,
+    setSpeech,
   } = usePetStore();
 
   // 从参数生成权重表
@@ -173,6 +173,7 @@ export function useCatBehavior() {
   const moveRafRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const idleVariantRef = useRef<'idle' | 'idle2'>('idle');
+  const prevStateRef = useRef<PetAnimationState>('idle');
   const appWindow = useRef(getCurrentWindow());
 
   // 切换人格时同步更新 params
@@ -296,6 +297,24 @@ export function useCatBehavior() {
     moveRafRef.current = requestAnimationFrame(animate);
   };
 
+  // 话术池
+  const pickSpeech = (state: PetAnimationState): string | null => {
+    const pools: Record<string, string[]> = {
+      idle:   ['喵?', '嗯?', '什么声音?'],
+      idle2:  ['喵?', '嗯?', '什么声音?'],
+      walking:['走一走~', '溜达溜达', '散个步', '逛逛'],
+      running:['冲鸭!', '跑起来!', '追!'],
+      sleeping:['睡醒了...', '喵~好舒服', '伸个懒腰~'],
+      playing:['嘿!', '跳!', '喵!'],
+      floating:['飞起来~', '飘呀飘', '好轻盈'],
+      licking:['舔舔毛', '要干净', '美美的'],
+      attacking:['嗷呜!', '看爪!', '抓到你了!'],
+    };
+    const pool = pools[state];
+    if (!pool) return null;
+    return pool[Math.floor(Math.random() * pool.length)];
+  };
+
   // 统一的状态切换入口：自动判断是否需要 startMoving
   const transitionTo = (next: PetAnimationState) => {
     if (next === 'idle' || next === 'idle2') {
@@ -305,6 +324,14 @@ export function useCatBehavior() {
       startMoving(generateTarget());
     } else {
       setAnimationState(next);
+    }
+    // 30% 概率触发气泡；idle↔idle2 自身互换不说，但从其他动作切回来可以说
+    const isIdle = next === 'idle' || next === 'idle2';
+    const wasIdle = prevStateRef.current === 'idle' || prevStateRef.current === 'idle2';
+    // eslint-disable-next-line react-hooks/purity
+    if (!(isIdle && wasIdle) && Math.random() < 0.3) {
+      const msg = pickSpeech(next);
+      if (msg) setSpeech(msg);
     }
   };
 

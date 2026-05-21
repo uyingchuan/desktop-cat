@@ -15,7 +15,7 @@
       {
         "title": "Desktop Cat",
         "width": 120,
-        "height": 120,
+        "height": 150,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,
