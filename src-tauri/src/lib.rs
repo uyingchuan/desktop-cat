@@ -23,6 +23,12 @@ impl Default for AppConfig {
 // 猫格状态（Rust 端唯一数据源）
 struct PersonalityState(Mutex<String>);
 
+/// 前端主动拉取猫格的命令（启动时调用，避免 setup 中 emit 的时序问题）
+#[tauri::command]
+fn get_personality(state: tauri::State<'_, PersonalityState>) -> String {
+    state.0.lock().unwrap().clone()
+}
+
 /// 从 app data 目录加载配置，文件不存在或损坏时返回默认值
 fn load_config(app: &tauri::AppHandle) -> AppConfig {
     let config_dir = app.path().app_data_dir().unwrap_or_default();
@@ -51,8 +57,8 @@ fn save_config(app: &tauri::AppHandle, config: &AppConfig) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        // 先用默认值占位，setup 中从磁盘加载后替换
         .manage(PersonalityState(Mutex::new("calm".to_string())))
+        .invoke_handler(tauri::generate_handler![get_personality])
         .setup(|app| {
             // 调试模式下启用日志
             if cfg!(debug_assertions) {

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { getCurrentWindow, LogicalPosition } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { usePetStore } from '../stores/usePetStore';
 import type { PetAnimationState, PetPosition, Personality } from '../types/pet';
 
@@ -207,14 +208,20 @@ export function useCatBehavior() {
   const idleVariantRef = useRef<'idle' | 'idle2'>('idle');
   const appWindow = useRef(getCurrentWindow());
 
-  // 监听来自 Rust 托盘菜单的性格切换事件
+  // 监听来自 Rust 托盘菜单的性格切换事件（运行时切换）
   useEffect(() => {
     const unlisten = listen<string>('personality-changed', (event) => {
       const p = event.payload as Personality;
-      console.log(p)
       setPersonality(p);
     });
     return () => { unlisten.then((fn) => fn()); };
+  }, [setPersonality]);
+
+  // 启动时从 Rust 命令拉取持久化的猫格（setup 阶段的 emit 无法被监听）
+  useEffect(() => {
+    invoke<string>('get_personality').then((p) => {
+      setPersonality(p as Personality);
+    }).catch(() => {});
   }, [setPersonality]);
 
   useEffect(() => {
@@ -225,7 +232,6 @@ export function useCatBehavior() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
 
-    console.log(personality);
     appWindow.current.onMoved(({ payload }) => {
       const pos = { x: payload.x, y: payload.y };
       setPosition(pos.x, pos.y);
