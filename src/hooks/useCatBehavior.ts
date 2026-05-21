@@ -152,12 +152,14 @@ export function useCatBehavior() {
     animationState,
     position,
     personalityParams,
+    showText,
     setPosition,
     setAnimationState,
     setFacingDirection,
     setPersonality,
     setPersonalityParams,
     setSpeech,
+    setShowText,
   } = usePetStore();
 
   // 从参数生成权重表
@@ -201,12 +203,21 @@ export function useCatBehavior() {
     return () => { unlisten.then((fn) => fn()); };
   }, [setPersonality]);
 
+  // 监听来自 Rust 托盘菜单的文本显示开关事件
+  useEffect(() => {
+    const unlisten = listen<boolean>('text-visibility-changed', (event) => {
+      setShowText(event.payload);
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, [setShowText]);
+
   // 启动时从 Rust 命令拉取持久化的猫格
   useEffect(() => {
-    invoke<{ active_personality: string; custom_personalities: Record<string, PersonalityParams> }>('get_config')
+    invoke<{ active_personality: string; custom_personalities: Record<string, PersonalityParams>; show_text: boolean }>('get_config')
       .then((config) => {
         const name = config.active_personality;
         setPersonality(name);
+        setShowText(config.show_text);
         if (name in BUILTIN_PARAMS) {
           setPersonalityParams(BUILTIN_PARAMS[name]);
         } else if (config.custom_personalities[name]) {
@@ -332,7 +343,7 @@ export function useCatBehavior() {
     const isIdle = next === 'idle' || next === 'idle2';
     const wasIdle = prevStateRef.current === 'idle' || prevStateRef.current === 'idle2';
     // eslint-disable-next-line react-hooks/purity
-    if (!(isIdle && wasIdle) && Math.random() < 0.3) {
+    if (!(isIdle && wasIdle) && Math.random() < 0.3 && usePetStore.getState().showText) {
       const msg = pickSpeech(next);
       if (msg) setSpeech(msg);
     }

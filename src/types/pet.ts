@@ -46,6 +46,7 @@ export interface PetState {
   personality: Personality;
   personalityParams: PersonalityParams;
   speech: string | null;
+  showText: boolean;
 }
 
 export type PetAction =

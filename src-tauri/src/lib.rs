@@ -21,10 +21,14 @@ struct PersonalityParams {
     speeches: Option<HashMap<String, Vec<String>>>,
 }
 
+fn default_show_text() -> bool { true }
+
 #[derive(Serialize, Deserialize, Clone)]
 struct PersistedConfig {
     active_personality: String,
     custom_personalities: HashMap<String, PersonalityParams>,
+    #[serde(default = "default_show_text")]
+    show_text: bool,
 }
 
 impl Default for PersistedConfig {
@@ -32,6 +36,7 @@ impl Default for PersistedConfig {
         Self {
             active_personality: "calm".to_string(),
             custom_personalities: HashMap::new(),
+            show_text: true,
         }
     }
 }
@@ -198,6 +203,11 @@ fn rebuild_tray_menu(app: &tauri::AppHandle, config: &PersistedConfig) -> Result
 
     let show_hide = MenuItemBuilder::with_id("show_hide", "隐藏 猫咪")
         .build(app).map_err(|e| e.to_string())?;
+    let toggle_text = {
+        let text = if config.show_text { "不显示文本" } else { "显示文本" };
+        MenuItemBuilder::with_id("toggle_text", text)
+            .build(app).map_err(|e| e.to_string())?
+    };
     let manage = MenuItemBuilder::with_id("open_settings", "个性管理...")
         .build(app).map_err(|e| e.to_string())?;
     let restart = MenuItemBuilder::with_id("restart", "重启 应用")
@@ -209,6 +219,7 @@ fn rebuild_tray_menu(app: &tauri::AppHandle, config: &PersistedConfig) -> Result
         .item(&show_hide)
         .separator()
         .item(&personality_submenu)
+        .item(&toggle_text)
         .item(&manage)
         .separator()
         .item(&restart)
@@ -278,6 +289,10 @@ pub fn run() {
             )?;
 
             let manage = MenuItemBuilder::with_id("open_settings", "个性管理...").build(app)?;
+            let toggle_text = {
+                let text = if config.show_text { "不显示文本" } else { "显示文本" };
+                MenuItemBuilder::with_id("toggle_text", text).build(app)?
+            };
             let restart = MenuItemBuilder::with_id("restart", "重启 应用").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
 
@@ -285,6 +300,7 @@ pub fn run() {
                 .item(&show_hide)
                 .separator()
                 .item(&personality_submenu)
+                .item(&toggle_text)
                 .item(&manage)
                 .separator()
                 .item(&restart)
@@ -317,6 +333,15 @@ pub fn run() {
                                     window.show().ok();
                                     show_hide.set_text("隐藏 猫咪").ok();
                                 }
+                            }
+                        }
+                        "toggle_text" => {
+                            let mut config = load_config(app);
+                            config.show_text = !config.show_text;
+                            save_config(app, &config);
+                            let _ = rebuild_tray_menu(app, &config);
+                            if let Some(window) = app.get_webview_window("main") {
+                                window.emit("text-visibility-changed", config.show_text).ok();
                             }
                         }
                         "open_settings" => {
