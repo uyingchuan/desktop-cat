@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Desktop Cat",
   "version": "0.2.0",
-  "mainBinaryName": "anime-cat",
+  "mainBinaryName": "Animate-cat",
   "identifier": "com.levons.cat",
   "build": {
     "frontendDist": "../dist",
