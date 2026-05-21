@@ -1,4 +1,21 @@
-export type Personality = 'calm' | 'active';
+export type Personality = string;
+
+// 猫格简化参数（4 个高级滑块映射到底层权重表）
+export interface PersonalityParams {
+  activity: number;    // 0-100  活动度 → walking + running
+  sleepiness: number;  // 0-100  睡眠欲 → sleeping
+  grooming: number;    // 0-100  舔毛欲 → licking
+  playfulness: number; // 0-100  玩耍度 → playing + floating + attacking
+}
+
+// 内置猫格预设参数
+export const BUILTIN_PARAMS: Record<string, PersonalityParams> = {
+  calm:    { activity: 20, sleepiness: 70, grooming: 60, playfulness: 15 },
+  active:  { activity: 70, sleepiness: 15, grooming: 20, playfulness: 65 },
+};
+
+// 内置猫格名称列表
+export const BUILTIN_PERSONALITIES = ['calm', 'active'];
 
 export type PetAnimationState =
   | 'idle' | 'idle2'
@@ -26,6 +43,7 @@ export interface PetState {
   mood: PetMood;
   facingDirection: FacingDirection;
   personality: Personality;
+  personalityParams: PersonalityParams;
 }
 
 export type PetAction =

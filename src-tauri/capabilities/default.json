@@ -3,7 +3,8 @@
   "identifier": "default",
   "description": "enables the default permissions",
   "windows": [
-    "main"
+    "main",
+    "settings"
   ],
   "permissions": [
     "core:default",
@@ -13,6 +14,8 @@
     "core:window:allow-show",
     "core:window:allow-hide",
     "core:window:allow-is-visible",
+    "core:window:allow-set-focus",
+    "core:webview:allow-create-webview-window",
     "core:tray:allow-new",
     "core:tray:allow-set-menu",
     "core:tray:allow-set-icon"

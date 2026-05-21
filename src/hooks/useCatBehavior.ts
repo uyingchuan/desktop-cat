@@ -3,7 +3,8 @@ import { getCurrentWindow, LogicalPosition } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { usePetStore } from '../stores/usePetStore';
-import type { PetAnimationState, PetPosition, Personality } from '../types/pet';
+import type { PetAnimationState, PetPosition,   PersonalityParams } from '../types/pet';
+import { BUILTIN_PARAMS } from '../types/pet';
 
 const SCREEN_PADDING = 50;
 const WALK_SPEED = 80;
@@ -30,136 +31,105 @@ interface Transition {
 
 type TransitionTable = Record<PetAnimationState, Transition[]>;
 
-// 慵懒性格：安静、爱舔毛、爱睡觉、少动
-const CALM_TRANSITIONS: TransitionTable = {
-  idle: [
-    { state: 'idle2', weight: 30 },
-    { state: 'walking', weight: 15 },
-    { state: 'running', weight: 5 },
-    { state: 'sleeping', weight: 20 },
-    { state: 'licking', weight: 18 },
-    { state: 'playing', weight: 4 },
-    { state: 'floating', weight: 4 },
-    { state: 'attacking', weight: 4 },
-  ],
-  idle2: [
-    { state: 'idle', weight: 30 },
-    { state: 'walking', weight: 15 },
-    { state: 'running', weight: 5 },
-    { state: 'sleeping', weight: 20 },
-    { state: 'licking', weight: 18 },
-    { state: 'playing', weight: 4 },
-    { state: 'floating', weight: 4 },
-    { state: 'attacking', weight: 4 },
-  ],
-  walking: [
-    { state: 'idle', weight: 35 },
-    { state: 'idle2', weight: 35 },
-    { state: 'licking', weight: 30 },
-  ],
-  running: [
-    { state: 'idle', weight: 50 },
-    { state: 'idle2', weight: 50 },
-  ],
-  sleeping: [
-    { state: 'idle', weight: 50 },
-    { state: 'idle2', weight: 50 },
-  ],
-  licking: [
-    { state: 'idle', weight: 30 },
-    { state: 'idle2', weight: 30 },
-    { state: 'sleeping', weight: 40 },
-  ],
-  playing: [
-    { state: 'idle', weight: 50 },
-    { state: 'idle2', weight: 50 },
-  ],
-  floating: [
-    { state: 'idle', weight: 50 },
-    { state: 'idle2', weight: 50 },
-  ],
-  attacking: [
-    { state: 'idle', weight: 50 },
-    { state: 'idle2', weight: 50 },
-  ],
-  hurt: [
-    { state: 'idle', weight: 100 },
-  ],
-  dead: [
-    { state: 'idle', weight: 100 },
-  ],
-};
+/** 将 4 个高级人格参数映射为完整的转移表 */
+function paramsToTransitionTable(p: PersonalityParams): TransitionTable {
+  // idle/idle2 的转移权重直接由参数值决定
+  const walk = Math.round(p.activity * 0.5);
+  const run = Math.round(p.activity * 0.5);
+  const sleep = p.sleepiness;
+  const lick = p.grooming;
+  const play = Math.round(p.playfulness * 0.34);
+  const flt = Math.round(p.playfulness * 0.33);
+  const atk = Math.round(p.playfulness * 0.33);
 
-// 活泼性格：好动、爱跑爱跳、不爱睡觉
-const ACTIVE_TRANSITIONS: TransitionTable = {
-  idle: [
-    { state: 'idle2', weight: 20 },
-    { state: 'walking', weight: 25 },
-    { state: 'running', weight: 15 },
-    { state: 'sleeping', weight: 5 },
-    { state: 'licking', weight: 10 },
-    { state: 'playing', weight: 10 },
-    { state: 'floating', weight: 8 },
-    { state: 'attacking', weight: 7 },
-  ],
-  idle2: [
-    { state: 'idle', weight: 20 },
-    { state: 'walking', weight: 25 },
-    { state: 'running', weight: 15 },
-    { state: 'sleeping', weight: 5 },
-    { state: 'licking', weight: 10 },
-    { state: 'playing', weight: 10 },
-    { state: 'floating', weight: 8 },
-    { state: 'attacking', weight: 7 },
-  ],
-  walking: [
-    { state: 'idle', weight: 30 },
-    { state: 'idle2', weight: 30 },
-    { state: 'licking', weight: 15 },
-    { state: 'playing', weight: 10 },
-    { state: 'floating', weight: 10 },
-    { state: 'attacking', weight: 5 },
-  ],
-  running: [
-    { state: 'idle', weight: 40 },
-    { state: 'idle2', weight: 40 },
-    { state: 'playing', weight: 10 },
-    { state: 'attacking', weight: 10 },
-  ],
-  sleeping: [
-    { state: 'idle', weight: 50 },
-    { state: 'idle2', weight: 50 },
-  ],
-  licking: [
-    { state: 'idle', weight: 35 },
-    { state: 'idle2', weight: 35 },
-    { state: 'sleeping', weight: 30 },
-  ],
-  playing: [
-    { state: 'idle', weight: 40 },
-    { state: 'idle2', weight: 40 },
-    { state: 'walking', weight: 10 },
-    { state: 'running', weight: 10 },
-  ],
-  floating: [
-    { state: 'idle', weight: 40 },
-    { state: 'idle2', weight: 40 },
-    { state: 'walking', weight: 10 },
-    { state: 'running', weight: 10 },
-  ],
-  attacking: [
-    { state: 'idle', weight: 40 },
-    { state: 'idle2', weight: 40 },
-    { state: 'walking', weight: 10 },
-    { state: 'running', weight: 10 },
-  ],
-  hurt: [
-    { state: 'idle', weight: 100 },
-  ],
-  dead: [
-    { state: 'idle', weight: 100 },
-  ],
-};
+  const actionsSum = walk + run + sleep + lick + play + flt + atk;
+  const idleSwap = Math.max(5, 100 - actionsSum);
+
+  const idleActions: Transition[] = [
+    { state: 'idle2', weight: idleSwap },
+    { state: 'walking', weight: walk },
+    { state: 'running', weight: run },
+    { state: 'sleeping', weight: sleep },
+    { state: 'licking', weight: lick },
+    { state: 'playing', weight: play },
+    { state: 'floating', weight: flt },
+    { state: 'attacking', weight: atk },
+  ];
+
+  const idle2Actions: Transition[] = [
+    { state: 'idle', weight: idleSwap },
+    { state: 'walking', weight: walk },
+    { state: 'running', weight: run },
+    { state: 'sleeping', weight: sleep },
+    { state: 'licking', weight: lick },
+    { state: 'playing', weight: play },
+    { state: 'floating', weight: flt },
+    { state: 'attacking', weight: atk },
+  ];
+  console.log(idleActions, idle2Actions);
+
+  // 活跃度高 → 走动后可能继续玩；否则走完就回 idle
+  const walkConclusion: Transition[] = p.activity > 50
+    ? [
+        { state: 'idle', weight: 30 },
+        { state: 'idle2', weight: 30 },
+        { state: 'licking', weight: 15 },
+        { state: 'playing', weight: 10 },
+        { state: 'floating', weight: 10 },
+        { state: 'attacking', weight: 5 },
+      ]
+    : [
+        { state: 'idle', weight: 35 },
+        { state: 'idle2', weight: 35 },
+        { state: 'licking', weight: 30 },
+      ];
+
+  const runConclusion: Transition[] = p.activity > 50
+    ? [
+        { state: 'idle', weight: 40 },
+        { state: 'idle2', weight: 40 },
+        { state: 'playing', weight: 10 },
+        { state: 'attacking', weight: 10 },
+      ]
+    : [
+        { state: 'idle', weight: 50 },
+        { state: 'idle2', weight: 50 },
+      ];
+
+  // 玩耍结束后，活跃度高则可能接着走
+  const playConclusion: Transition[] = p.activity > 50
+    ? [
+        { state: 'idle', weight: 40 },
+        { state: 'idle2', weight: 40 },
+        { state: 'walking', weight: 10 },
+        { state: 'running', weight: 10 },
+      ]
+    : [
+        { state: 'idle', weight: 50 },
+        { state: 'idle2', weight: 50 },
+      ];
+
+  return {
+    idle: idleActions,
+    idle2: idle2Actions,
+    walking: walkConclusion,
+    running: runConclusion,
+    sleeping: [
+      { state: 'idle', weight: 50 },
+      { state: 'idle2', weight: 50 },
+    ],
+    licking: [
+      { state: 'idle', weight: 30 },
+      { state: 'idle2', weight: 30 },
+      { state: 'sleeping', weight: 40 },
+    ],
+    playing: playConclusion,
+    floating: playConclusion,
+    attacking: playConclusion,
+    hurt: [{ state: 'idle', weight: 100 }],
+    dead: [{ state: 'idle', weight: 100 }],
+  };
+}
 
 function pickNext(current: PetAnimationState, table: TransitionTable): PetAnimationState {
   const transitions = table[current];
@@ -182,23 +152,20 @@ export function useCatBehavior() {
   const {
     animationState,
     position,
-    personality,
+    personalityParams,
     setPosition,
     setAnimationState,
     setFacingDirection,
     setPersonality,
+    setPersonalityParams,
   } = usePetStore();
 
-  // 根据当前性格选择权重表
-  const tableRef = useRef<TransitionTable>(
-    personality === 'active' ? ACTIVE_TRANSITIONS : CALM_TRANSITIONS
-  );
-  const personalityRef = useRef<Personality>(personality);
+  // 从参数生成权重表
+  const tableRef = useRef<TransitionTable>(paramsToTransitionTable(personalityParams));
 
   useEffect(() => {
-    personalityRef.current = personality;
-    tableRef.current = personality === 'active' ? ACTIVE_TRANSITIONS : CALM_TRANSITIONS;
-  }, [personality]);
+    tableRef.current = paramsToTransitionTable(personalityParams);
+  }, [personalityParams]);
 
   const pick = (current: PetAnimationState) => pickNext(current, tableRef.current);
 
@@ -208,20 +175,44 @@ export function useCatBehavior() {
   const idleVariantRef = useRef<'idle' | 'idle2'>('idle');
   const appWindow = useRef(getCurrentWindow());
 
+  // 切换人格时同步更新 params
+  const applyPersonality = (name: string) => {
+    setPersonality(name);
+    if (name in BUILTIN_PARAMS) {
+      setPersonalityParams(BUILTIN_PARAMS[name]);
+    } else {
+      // 自定义人格：从 Rust 配置中获取参数
+      invoke<{ custom_personalities: Record<string, PersonalityParams> }>('get_config')
+        .then((config) => {
+          if (config.custom_personalities[name]) {
+            setPersonalityParams(config.custom_personalities[name]);
+          }
+        })
+        .catch(() => {});
+    }
+  };
+
   // 监听来自 Rust 托盘菜单的性格切换事件（运行时切换）
   useEffect(() => {
     const unlisten = listen<string>('personality-changed', (event) => {
-      const p = event.payload as Personality;
-      setPersonality(p);
+      applyPersonality(event.payload);
     });
     return () => { unlisten.then((fn) => fn()); };
   }, [setPersonality]);
 
-  // 启动时从 Rust 命令拉取持久化的猫格（setup 阶段的 emit 无法被监听）
+  // 启动时从 Rust 命令拉取持久化的猫格
   useEffect(() => {
-    invoke<string>('get_personality').then((p) => {
-      setPersonality(p as Personality);
-    }).catch(() => {});
+    invoke<{ active_personality: string; custom_personalities: Record<string, PersonalityParams> }>('get_config')
+      .then((config) => {
+        const name = config.active_personality;
+        setPersonality(name);
+        if (name in BUILTIN_PARAMS) {
+          setPersonalityParams(BUILTIN_PARAMS[name]);
+        } else if (config.custom_personalities[name]) {
+          setPersonalityParams(config.custom_personalities[name]);
+        }
+      })
+      .catch(() => {});
   }, [setPersonality]);
 
   useEffect(() => {
