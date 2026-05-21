@@ -211,6 +211,7 @@ export function useCatBehavior() {
   useEffect(() => {
     const unlisten = listen<string>('personality-changed', (event) => {
       const p = event.payload as Personality;
+      console.log(p)
       setPersonality(p);
     });
     return () => { unlisten.then((fn) => fn()); };
@@ -224,6 +225,7 @@ export function useCatBehavior() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
 
+    console.log(personality);
     appWindow.current.onMoved(({ payload }) => {
       const pos = { x: payload.x, y: payload.y };
       setPosition(pos.x, pos.y);

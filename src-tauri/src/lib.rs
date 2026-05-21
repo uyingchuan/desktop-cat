@@ -69,7 +69,10 @@ pub fn run() {
             *app.state::<PersonalityState>().0.lock().unwrap() = personality.clone();
 
             // 通知前端当前猫格
-            app.emit("personality-changed", &personality).ok();
+            // 使用 window.emit 而非 app.emit，确保事件到达 webview 监听器
+            if let Some(window) = app.get_webview_window("main") {
+                window.emit("personality-changed", &personality).ok();
+            }
 
             // 从内嵌资源加载托盘图标 (32x32 像素图)
             let icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))?;
@@ -139,7 +142,9 @@ pub fn run() {
                             calm.set_text("✓ 慵懒").ok();
                             active.set_text("   活泼").ok();
                             save_config(app, &AppConfig { personality: "calm".to_string() });
-                            app.emit("personality-changed", "calm").ok();
+                            if let Some(window) = app.get_webview_window("main") {
+                                window.emit("personality-changed", "calm").ok();
+                            }
                         }
                         "personality_active" => {
                             if let Ok(mut p) = state.0.lock() {
@@ -148,7 +153,9 @@ pub fn run() {
                             calm.set_text("   慵懒").ok();
                             active.set_text("✓ 活泼").ok();
                             save_config(app, &AppConfig { personality: "active".to_string() });
-                            app.emit("personality-changed", "active").ok();
+                            if let Some(window) = app.get_webview_window("main") {
+                                window.emit("personality-changed", "active").ok();
+                            }
                         }
                         "restart" => {
                             app.restart();
