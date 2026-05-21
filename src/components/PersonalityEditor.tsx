@@ -14,6 +14,7 @@ interface EditingState {
   name: string;
   params: PersonalityParams;
   isNew: boolean;
+  rawSpeeches: Record<string, string>;  // raw textarea text, parsed to params.speeches on save
 }
 
 const defaultParams: PersonalityParams = {
@@ -23,10 +24,32 @@ const defaultParams: PersonalityParams = {
   playfulness: 40,
 };
 
+const DEFAULT_SPEECHES: Record<string, string[]> = {
+  idle:   ['喵?', '嗯?', '什么声音?'],
+  walking:['走一走~', '溜达溜达', '散个步', '逛逛'],
+  running:['冲鸭!', '跑起来!', '追!'],
+  sleeping:['睡醒了...', '喵~好舒服', '伸个懒腰~'],
+  playing:['嘿!', '跳!', '喵!'],
+  floating:['飞起来~', '飘呀飘', '好轻盈'],
+  licking:['舔舔毛', '要干净', '美美的'],
+  attacking:['嗷呜!', '看爪!', '抓到你了!'],
+};
+
+// 将 string[] 转成 textarea 可用的 raw text
+function speechesToRaw(custom?: Record<string, string[]>): Record<string, string> {
+  const raw: Record<string, string> = {};
+  for (const key of Object.keys(DEFAULT_SPEECHES)) {
+    const src = custom?.[key] && custom[key].length > 0 ? custom[key] : DEFAULT_SPEECHES[key];
+    raw[key] = src.join('\n');
+  }
+  return raw;
+}
+
 function PersonalityEditor() {
   const [config, setConfig] = useState<Config | null>(null);
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [error, setError] = useState('');
+  const [showSpeeches, setShowSpeeches] = useState(false);
 
   const loadConfig = () => {
     invoke<Config>('get_config').then(setConfig).catch((e) => setError(String(e)));
@@ -40,12 +63,12 @@ function PersonalityEditor() {
   }, []);
 
   const startNew = () => {
-    setEditing({ name: '', params: { ...defaultParams }, isNew: true });
+    setEditing({ name: '', params: { ...defaultParams }, isNew: true, rawSpeeches: speechesToRaw() });
     setError('');
   };
 
   const startEdit = (name: string, params: PersonalityParams) => {
-    setEditing({ name, params: { ...params }, isNew: false });
+    setEditing({ name, params: { ...params }, isNew: false, rawSpeeches: speechesToRaw(params.speeches) });
     setError('');
   };
 
@@ -61,7 +84,14 @@ function PersonalityEditor() {
       setError('不能使用内置猫格名称');
       return;
     }
-    invoke('save_personality', { name: editing.name.trim(), params: editing.params })
+    // 将 rawSpeeches 解析为 string[] 存入 params.speeches
+    const speeches: Record<string, string[]> = {};
+    for (const [k, v] of Object.entries(editing.rawSpeeches)) {
+      const lines = v.split('\n').filter((l) => l.trim());
+      if (lines.length > 0) speeches[k] = lines;
+    }
+    const params = { ...editing.params, speeches: Object.keys(speeches).length > 0 ? speeches : undefined };
+    invoke('save_personality', { name: editing.name.trim(), params })
       .then(() => {
         setEditing(null);
         loadConfig();
@@ -78,6 +108,11 @@ function PersonalityEditor() {
   const setParam = (key: keyof PersonalityParams, value: number) => {
     if (!editing) return;
     setEditing({ ...editing, params: { ...editing.params, [key]: value } });
+  };
+
+  const setSpeech = (key: string, text: string) => {
+    if (!editing) return;
+    setEditing({ ...editing, rawSpeeches: { ...editing.rawSpeeches, [key]: text } });
   };
 
   if (!config) return <div className="pe-container"><p>加载中...</p></div>;
@@ -114,6 +149,33 @@ function PersonalityEditor() {
           <SliderRow label="睡眠欲" emoji="😴" value={editing.params.sleepiness} onChange={(v) => setParam('sleepiness', v)} hint="决定猫猫睡觉的频率" />
           <SliderRow label="舔毛欲" emoji="🧹" value={editing.params.grooming} onChange={(v) => setParam('grooming', v)} hint="决定猫猫舔毛的频率" />
           <SliderRow label="玩耍度" emoji="🎾" value={editing.params.playfulness} onChange={(v) => setParam('playfulness', v)} hint="决定猫猫跳/扑/飘的频率" />
+          <button type="button" className="pe-btn pe-btn-sm" onClick={() => setShowSpeeches(!showSpeeches)} style={{ marginTop: 8 }}>
+            {showSpeeches ? '收起话术 ▴' : '编辑话术 ▾'}
+          </button>
+          {showSpeeches && (
+            <div className="pe-speeches">
+              {[
+                { key: 'idle', label: '待机' },
+                { key: 'walking', label: '走路' },
+                { key: 'running', label: '跑步' },
+                { key: 'sleeping', label: '睡醒' },
+                { key: 'licking', label: '舔毛' },
+                { key: 'playing', label: '跳跃' },
+                { key: 'floating', label: '漂浮' },
+                { key: 'attacking', label: '攻击' },
+              ].map(({ key, label }) => (
+                <div key={key} className="pe-speech-row">
+                  <label>{label}</label>
+                  <textarea
+                    rows={4}
+                    value={editing.rawSpeeches[key] || ''}
+                    onChange={(e) => setSpeech(key, e.target.value)}
+                    placeholder="按 Enter 换行，每行一句"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
           <div className="pe-editor-actions">
             <button className="pe-btn pe-btn-primary" onClick={savePersonality}>保存</button>
             <button className="pe-btn" onClick={cancelEdit}>取消</button>

@@ -96,3 +96,17 @@
 .pe-row-params { display: flex; gap: 14px; margin-top: 6px; font-size: 13px; color: #888; }
 
 .pe-hint { color: #999; font-size: 13px; text-align: center; padding: 20px 0; }
+
+.pe-speeches { margin-top: 8px; }
+.pe-speech-row { margin-bottom: 8px; }
+.pe-speech-row label { display: block; font-size: 12px; color: #666; margin-bottom: 2px; }
+.pe-speech-row textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  resize: vertical;
+  font-family: system-ui, sans-serif;
+}

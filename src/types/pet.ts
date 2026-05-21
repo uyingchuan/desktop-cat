@@ -6,6 +6,7 @@ export interface PersonalityParams {
   sleepiness: number;  // 0-100  睡眠欲 → sleeping
   grooming: number;    // 0-100  舔毛欲 → licking
   playfulness: number; // 0-100  玩耍度 → playing + floating + attacking
+  speeches?: Record<string, string[]>; // 自定义话术，key 为动画状态名
 }
 
 // 内置猫格预设参数

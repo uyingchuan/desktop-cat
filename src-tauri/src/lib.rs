@@ -17,6 +17,8 @@ struct PersonalityParams {
     sleepiness: u8,
     grooming: u8,
     playfulness: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    speeches: Option<HashMap<String, Vec<String>>>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

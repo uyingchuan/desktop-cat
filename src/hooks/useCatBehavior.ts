@@ -297,20 +297,23 @@ export function useCatBehavior() {
     moveRafRef.current = requestAnimationFrame(animate);
   };
 
-  // 话术池
+  // 内置默认话术
+  const DEFAULT_SPEECHES: Record<string, string[]> = {
+    idle:   ['喵?', '嗯?', '什么声音?'],
+    idle2:  ['喵?', '嗯?', '什么声音?'],
+    walking:['走一走~', '溜达溜达', '散个步', '逛逛'],
+    running:['冲鸭!', '跑起来!', '追!'],
+    sleeping:['睡醒了...', '喵~好舒服', '伸个懒腰~'],
+    playing:['嘿!', '跳!', '喵!'],
+    floating:['飞起来~', '飘呀飘', '好轻盈'],
+    licking:['舔舔毛', '要干净', '美美的'],
+    attacking:['嗷呜!', '看爪!', '抓到你了!'],
+  };
+
+  // 优先用自定义话术，为空则用内置默认
   const pickSpeech = (state: PetAnimationState): string | null => {
-    const pools: Record<string, string[]> = {
-      idle:   ['喵?', '嗯?', '什么声音?'],
-      idle2:  ['喵?', '嗯?', '什么声音?'],
-      walking:['走一走~', '溜达溜达', '散个步', '逛逛'],
-      running:['冲鸭!', '跑起来!', '追!'],
-      sleeping:['睡醒了...', '喵~好舒服', '伸个懒腰~'],
-      playing:['嘿!', '跳!', '喵!'],
-      floating:['飞起来~', '飘呀飘', '好轻盈'],
-      licking:['舔舔毛', '要干净', '美美的'],
-      attacking:['嗷呜!', '看爪!', '抓到你了!'],
-    };
-    const pool = pools[state];
+    const custom = personalityParams.speeches?.[state];
+    const pool = (custom && custom.length > 0) ? custom : DEFAULT_SPEECHES[state];
     if (!pool) return null;
     return pool[Math.floor(Math.random() * pool.length)];
   };
