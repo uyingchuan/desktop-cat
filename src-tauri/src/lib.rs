@@ -19,6 +19,8 @@ struct PersonalityParams {
     playfulness: u8,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     speeches: Option<HashMap<String, Vec<String>>>,
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "systemPrompt")]
+    system_prompt: Option<String>,
 }
 
 fn default_true() -> bool { true }
@@ -31,6 +33,8 @@ struct PersistedConfig {
     show_text: bool,
     #[serde(default = "default_true")]
     reminder_enabled: bool,
+    #[serde(default)]
+    deepseek_api_key: Option<String>,
 }
 
 impl Default for PersistedConfig {
@@ -40,6 +44,7 @@ impl Default for PersistedConfig {
             custom_personalities: HashMap::new(),
             show_text: true,
             reminder_enabled: true,
+            deepseek_api_key: None,
         }
     }
 }
@@ -171,6 +176,35 @@ fn delete_personality(app: tauri::AppHandle, name: String) -> Result<(), String>
 }
 
 #[tauri::command]
+fn set_api_key(app: tauri::AppHandle, key: String) -> Result<(), String> {
+    let mut config = load_config(&app);
+    config.deepseek_api_key = Some(key);
+    save_config(&app, &config);
+    Ok(())
+}
+
+#[tauri::command]
+fn open_chat(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("chat") {
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+    } else {
+        let _ = WebviewWindowBuilder::new(
+            &app,
+            "chat",
+            WebviewUrl::App("/#/chat".into()),
+        )
+        .title("聊天室")
+        .inner_size(400.0, 560.0)
+        .resizable(true)
+        .decorations(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn open_settings(app: tauri::AppHandle) -> Result<(), String> {
     if app.get_webview_window("settings").is_some() {
         // 窗口已存在，聚焦
@@ -218,6 +252,8 @@ fn rebuild_tray_menu(app: &tauri::AppHandle, config: &PersistedConfig) -> Result
     };
     let manage = MenuItemBuilder::with_id("open_settings", "个性管理...")
         .build(app).map_err(|e| e.to_string())?;
+    let chat = MenuItemBuilder::with_id("open_chat", "聊天室")
+        .build(app).map_err(|e| e.to_string())?;
     let restart = MenuItemBuilder::with_id("restart", "重启 应用")
         .build(app).map_err(|e| e.to_string())?;
     let quit = MenuItemBuilder::with_id("quit", "退出")
@@ -230,6 +266,7 @@ fn rebuild_tray_menu(app: &tauri::AppHandle, config: &PersistedConfig) -> Result
         .item(&toggle_text)
         .item(&toggle_reminder)
         .item(&manage)
+        .item(&chat)
         .separator()
         .item(&restart)
         .item(&quit)
@@ -264,6 +301,8 @@ pub fn run() {
             save_personality,
             delete_personality,
             open_settings,
+            set_api_key,
+            open_chat,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -298,6 +337,7 @@ pub fn run() {
             )?;
 
             let manage = MenuItemBuilder::with_id("open_settings", "个性管理...").build(app)?;
+            let chat = MenuItemBuilder::with_id("open_chat", "聊天室").build(app)?;
             let toggle_text = {
                 let text = if config.show_text { "关闭文本" } else { "显示文本" };
                 MenuItemBuilder::with_id("toggle_text", text).build(app)?
@@ -316,6 +356,7 @@ pub fn run() {
                 .item(&toggle_text)
                 .item(&toggle_reminder)
                 .item(&manage)
+                .item(&chat)
                 .separator()
                 .item(&restart)
                 .item(&quit)
@@ -368,7 +409,6 @@ pub fn run() {
                             }
                         }
                         "open_settings" => {
-                            // 打开/聚焦设置窗口
                             if app.get_webview_window("settings").is_some() {
                                 app.get_webview_window("settings").unwrap().show().ok();
                                 app.get_webview_window("settings").unwrap().set_focus().ok();
@@ -382,6 +422,24 @@ pub fn run() {
                                 .title("猫格管理")
                                 .inner_size(700.0, 520.0)
                                 .resizable(false)
+                                .decorations(true)
+                                .build();
+                            }
+                        }
+                        "open_chat" => {
+                            if let Some(window) = app.get_webview_window("chat") {
+                                window.show().ok();
+                                window.set_focus().ok();
+                            } else {
+                                let app_ref: &tauri::AppHandle = &app;
+                                let _ = WebviewWindowBuilder::new(
+                                    app_ref,
+                                    "chat",
+                                    WebviewUrl::App("/#/chat".into()),
+                                )
+                                .title("聊天室")
+                                .inner_size(400.0, 560.0)
+                                .resizable(true)
                                 .decorations(true)
                                 .build();
                             }

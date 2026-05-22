@@ -8,6 +8,7 @@ import './PersonalityEditor.css';
 interface Config {
   active_personality: string;
   custom_personalities: Record<string, PersonalityParams>;
+  deepseek_api_key?: string;
 }
 
 interface EditingState {
@@ -50,9 +51,20 @@ function PersonalityEditor() {
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [error, setError] = useState('');
   const [showSpeeches, setShowSpeeches] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+
+  const saveApiKey = (key: string) => {
+    setApiKey(key);
+    invoke('set_api_key', { key }).catch((e) => setError(String(e)));
+  };
 
   const loadConfig = () => {
-    invoke<Config>('get_config').then(setConfig).catch((e) => setError(String(e)));
+    invoke<Config>('get_config')
+      .then((c) => {
+        setConfig(c);
+        setApiKey(c.deepseek_api_key || '');
+      })
+      .catch((e) => setError(String(e)));
   };
 
   useEffect(() => { loadConfig(); }, []);
@@ -129,6 +141,18 @@ function PersonalityEditor() {
 
       {error && <div className="pe-error">{error}</div>}
 
+      <div className="pe-section">
+        <h3>DeepSeek API Key</h3>
+        <input
+          type="password"
+          className="pe-api-key-input"
+          value={apiKey}
+          onChange={(e) => saveApiKey(e.target.value)}
+          placeholder="输入你的 DeepSeek API Key..."
+        />
+        <p className="pe-hint" style={{ marginTop: 4 }}>在 https://platform.deepseek.com 获取</p>
+      </div>
+
       {/* 编辑面板 */}
       {editing && (
         <div className="pe-editor">
@@ -149,6 +173,17 @@ function PersonalityEditor() {
           <SliderRow label="睡眠欲" emoji="😴" value={editing.params.sleepiness} onChange={(v) => setParam('sleepiness', v)} hint="决定猫猫睡觉的频率" />
           <SliderRow label="舔毛欲" emoji="🧹" value={editing.params.grooming} onChange={(v) => setParam('grooming', v)} hint="决定猫猫舔毛的频率" />
           <SliderRow label="玩耍度" emoji="🎾" value={editing.params.playfulness} onChange={(v) => setParam('playfulness', v)} hint="决定猫猫跳/扑/飘的频率" />
+
+          <div className="pe-field" style={{ marginTop: 12 }}>
+            <label>聊天 System Prompt</label>
+            <textarea
+              rows={3}
+              value={editing.params.systemPrompt || ''}
+              onChange={(e) => setEditing({ ...editing, params: { ...editing.params, systemPrompt: e.target.value } })}
+              placeholder="设置聊天时猫猫的角色设定..."
+            />
+          </div>
+
           <button type="button" className="pe-btn pe-btn-sm" onClick={() => setShowSpeeches(!showSpeeches)} style={{ marginTop: 8 }}>
             {showSpeeches ? '收起话术 ▴' : '编辑话术 ▾'}
           </button>

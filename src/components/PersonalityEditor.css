@@ -58,13 +58,23 @@
 .pe-editor h3 { margin: 0 0 12px 0; font-size: 16px; }
 .pe-field { margin-bottom: 10px; }
 .pe-field label { display: block; font-size: 13px; margin-bottom: 4px; color: #666; }
-.pe-field input {
+.pe-field input, .pe-field textarea {
   width: 100%;
   padding: 6px 10px;
   border: 1px solid #ccc;
   border-radius: 4px;
   font-size: 14px;
   box-sizing: border-box;
+}
+
+.pe-api-key-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+  box-sizing: border-box;
+  font-family: monospace;
 }
 .pe-editor-actions { margin-top: 14px; display: flex; gap: 8px; }
 

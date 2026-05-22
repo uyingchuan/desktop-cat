@@ -168,6 +168,7 @@ export function useCatBehavior() {
     personalityParams,
     reminding,
     reminderEnabled,
+    chatting,
     setPosition,
     setAnimationState,
     setFacingDirection,
@@ -387,9 +388,17 @@ export function useCatBehavior() {
     }, delay);
   };
 
-  // 状态机 — 提醒模式下完全旁路
+  // 状态机 — 提醒模式/聊天模式下旁路
   useEffect(() => {
     if (reminding) return;
+
+    if (chatting) {
+      if (moveRafRef.current) {
+        cancelAnimationFrame(moveRafRef.current);
+        moveRafRef.current = null;
+      }
+      return;
+    }
 
     if (timerRef.current) {
       clearTimeout(timerRef.current);
@@ -426,7 +435,7 @@ export function useCatBehavior() {
         }
       };
     }
-  }, [animationState, reminding]);
+  }, [animationState, reminding, chatting]);
 
   // 提醒模式循环：走动 → 待机 → 说话 → 延迟 → 走动 ...
   useEffect(() => {

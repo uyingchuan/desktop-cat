@@ -13,6 +13,7 @@ interface PetStoreActions {
   setShowText: (show: boolean) => void;
   setReminding: (reminding: boolean) => void;
   setReminderEnabled: (enabled: boolean) => void;
+  setChatting: (chatting: boolean) => void;
 }
 
 type PetStore = PetState & PetStoreActions;
@@ -28,6 +29,7 @@ export const usePetStore = create<PetStore>((set) => ({
   showText: true,
   reminding: false,
   reminderEnabled: true,
+  chatting: false,
 
   setPosition: (x, y) => set({ position: { x, y } }),
   setAnimationState: (animationState) => set({ animationState }),
@@ -39,4 +41,5 @@ export const usePetStore = create<PetStore>((set) => ({
   setShowText: (show) => set({ showText: show }),
   setReminding: (reminding) => set({ reminding }),
   setReminderEnabled: (enabled) => set({ reminderEnabled: enabled }),
+  setChatting: (chatting) => set({ chatting }),
 }));
