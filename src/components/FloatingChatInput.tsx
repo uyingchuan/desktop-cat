@@ -85,7 +85,7 @@ function FloatingChatInput() {
   );
 
   return (
-    <div className="floating-chat">
+    <div className="floating-chat" onClick={(e) => e.stopPropagation()}>
       <input
         ref={inputRef}
         className="floating-chat-input"

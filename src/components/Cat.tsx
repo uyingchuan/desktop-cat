@@ -1,5 +1,4 @@
 import { useCallback, useRef } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useCatBehavior } from '../hooks/useCatBehavior';
 import { usePetStore } from '../stores/usePetStore';
 import CatSprite from './CatSprite';
@@ -10,15 +9,6 @@ function Cat() {
   useCatBehavior();
 
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleMouseDown = useCallback(() => {
-    const state = usePetStore.getState();
-    if (!state.reminding && !state.chatting) {
-      getCurrentWindow().startDragging().catch((err) => {
-        console.error('Failed to start window dragging:', err);
-      });
-    }
-  }, []);
 
   const handleDragStart = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -40,7 +30,6 @@ function Cat() {
   }, []);
 
   const handleDoubleClick = useCallback(() => {
-    console.log('cc')
     if (clickTimerRef.current) {
       clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
@@ -53,11 +42,14 @@ function Cat() {
   }, []);
 
   const chatting = usePetStore((s) => s.chatting);
+  const reminding = usePetStore((s) => s.reminding);
+
+  const enableDrag = !reminding && !chatting;
 
   return (
     <div
       className="cat-container"
-      onMouseDown={handleMouseDown}
+      data-tauri-drag-region={enableDrag ? '' : undefined}
       onDragStart={handleDragStart}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}

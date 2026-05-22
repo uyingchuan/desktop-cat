@@ -3,12 +3,14 @@
   top: 2px;
   left: 50%;
   transform: translateX(-50%);
+  max-width: 120px;
+  width: max-content;
+  white-space: normal;
   background: #fff;
   color: #333;
   font-size: 11px;
   padding: 4px 10px;
   border-radius: 10px;
-  white-space: nowrap;
   box-shadow: 0 1px 4px rgba(0,0,0,0.15);
   animation: speech-in 0.25s ease-out;
   pointer-events: none;
