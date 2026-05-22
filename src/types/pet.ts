@@ -47,6 +47,8 @@ export interface PetState {
   personalityParams: PersonalityParams;
   speech: string | null;
   showText: boolean;
+  reminding: boolean;
+  reminderEnabled: boolean;
 }
 
 export type PetAction =

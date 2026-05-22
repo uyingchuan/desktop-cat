@@ -22,6 +22,19 @@ const ACTION_DURATIONS: Record<string, number> = {
   attacking: 800,
 };
 
+const REMINDER_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+
+const REMINDER_SPEECHES = [
+  '该休息一下了~',
+  '起来活动活动吧',
+  '工作这么久，喝点水吧',
+  '眼睛要休息一下哦',
+  '伸个懒腰吧~',
+  '喵~休息一会儿吧',
+  '别太累了哦',
+  '站起来走走~',
+];
+
 const MOVE_STATES: PetAnimationState[] = ['walking', 'running'];
 
 interface Transition {
@@ -66,6 +79,7 @@ function paramsToTransitionTable(p: PersonalityParams): TransitionTable {
     { state: 'floating', weight: flt },
     { state: 'attacking', weight: atk },
   ];
+  console.log(idle2Actions, idleActions);
 
   // 活跃度高 → 走动后可能继续玩；否则走完就回 idle
   const walkConclusion: Transition[] = p.activity > 50
@@ -152,7 +166,8 @@ export function useCatBehavior() {
     animationState,
     position,
     personalityParams,
-    showText,
+    reminding,
+    reminderEnabled,
     setPosition,
     setAnimationState,
     setFacingDirection,
@@ -160,6 +175,8 @@ export function useCatBehavior() {
     setPersonalityParams,
     setSpeech,
     setShowText,
+    setReminding,
+    setReminderEnabled,
   } = usePetStore();
 
   // 从参数生成权重表
@@ -177,6 +194,8 @@ export function useCatBehavior() {
   const idleVariantRef = useRef<'idle' | 'idle2'>('idle');
   const prevStateRef = useRef<PetAnimationState>('idle');
   const appWindow = useRef(getCurrentWindow());
+  const reminderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reminderLoopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 切换人格时同步更新 params
   const applyPersonality = (name: string) => {
@@ -211,13 +230,25 @@ export function useCatBehavior() {
     return () => { unlisten.then((fn) => fn()); };
   }, [setShowText]);
 
+  // 监听来自 Rust 托盘菜单的提醒开关事件
+  useEffect(() => {
+    const unlisten = listen<boolean>('reminder-toggled', (event) => {
+      setReminderEnabled(event.payload);
+      if (!event.payload) {
+        setReminding(false);
+      }
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, [setReminderEnabled, setReminding]);
+
   // 启动时从 Rust 命令拉取持久化的猫格
   useEffect(() => {
-    invoke<{ active_personality: string; custom_personalities: Record<string, PersonalityParams>; show_text: boolean }>('get_config')
+    invoke<{ active_personality: string; custom_personalities: Record<string, PersonalityParams>; show_text: boolean; reminder_enabled: boolean }>('get_config')
       .then((config) => {
         const name = config.active_personality;
         setPersonality(name);
         setShowText(config.show_text);
+        setReminderEnabled(config.reminder_enabled);
         if (name in BUILTIN_PARAMS) {
           setPersonalityParams(BUILTIN_PARAMS[name]);
         } else if (config.custom_personalities[name]) {
@@ -356,8 +387,10 @@ export function useCatBehavior() {
     }, delay);
   };
 
-  // 状态机
+  // 状态机 — 提醒模式下完全旁路
   useEffect(() => {
+    if (reminding) return;
+
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -393,12 +426,114 @@ export function useCatBehavior() {
         }
       };
     }
-  }, [animationState]);
+  }, [animationState, reminding]);
+
+  // 提醒模式循环：走动 → 待机 → 说话 → 延迟 → 走动 ...
+  useEffect(() => {
+    if (!reminding) {
+      if (reminderLoopRef.current) {
+        clearTimeout(reminderLoopRef.current);
+        reminderLoopRef.current = null;
+      }
+      if (moveRafRef.current) {
+        cancelAnimationFrame(moveRafRef.current);
+        moveRafRef.current = null;
+      }
+      setAnimationState('idle');
+      return;
+    }
+
+    const remindWalk = () => {
+      const target = generateTarget();
+      const dist = getDistance(positionRef.current, target);
+      const moveState: PetAnimationState = dist >= RUN_DISTANCE_THRESHOLD ? 'running' : 'walking';
+      setAnimationState(moveState);
+
+      const speed = dist >= RUN_DISTANCE_THRESHOLD ? RUN_SPEED : WALK_SPEED;
+
+      const animate = () => {
+        const current = positionRef.current;
+        const dx = target.x - current.x;
+        const dy = target.y - current.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+
+        if (d < 3) {
+          moveRafRef.current = null;
+          // 到达 → 待机 + 说话
+          setAnimationState('idle');
+          const msg = REMINDER_SPEECHES[Math.floor(Math.random() * REMINDER_SPEECHES.length)];
+          setSpeech(msg);
+          // 说话显示 2.5s 后短暂延迟，然后继续走动
+          reminderLoopRef.current = setTimeout(() => {
+            remindWalk();
+          }, 2500 + 1500);
+          return;
+        }
+
+        setFacingDirection(dx >= 0 ? 'right' : 'left');
+
+        const step = speed / 60;
+        const vx = (dx / d) * step;
+        const vy = (dy / d) * step;
+        const newPos = { x: current.x + vx, y: current.y + vy };
+
+        positionRef.current = newPos;
+        appWindow.current.setPosition(
+          new LogicalPosition(Math.round(newPos.x), Math.round(newPos.y))
+        );
+
+        moveRafRef.current = requestAnimationFrame(animate);
+      };
+
+      moveRafRef.current = requestAnimationFrame(animate);
+    };
+
+    // 清除当前动作，开始提醒循环
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    if (moveRafRef.current) { cancelAnimationFrame(moveRafRef.current); moveRafRef.current = null; }
+
+    remindWalk();
+
+    return () => {
+      if (reminderLoopRef.current) {
+        clearTimeout(reminderLoopRef.current);
+        reminderLoopRef.current = null;
+      }
+    };
+  }, [reminding]);
+
+  // 30 分钟提醒计时器
+  useEffect(() => {
+    const startTimer = () => {
+      reminderTimerRef.current = setTimeout(() => {
+        setReminding(true);
+      }, REMINDER_INTERVAL_MS);
+    };
+
+    if (reminding || !reminderEnabled) {
+      if (reminderTimerRef.current) {
+        clearTimeout(reminderTimerRef.current);
+        reminderTimerRef.current = null;
+      }
+      return;
+    }
+
+    startTimer();
+
+    return () => {
+      if (reminderTimerRef.current) {
+        clearTimeout(reminderTimerRef.current);
+        reminderTimerRef.current = null;
+      }
+    };
+  }, [reminding, reminderEnabled]);
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (moveRafRef.current) cancelAnimationFrame(moveRafRef.current);
+      if (reminderTimerRef.current) clearTimeout(reminderTimerRef.current);
+      if (reminderLoopRef.current) clearTimeout(reminderLoopRef.current);
     };
   }, []);
 }

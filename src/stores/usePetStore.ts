@@ -11,6 +11,8 @@ interface PetStoreActions {
   setPersonalityParams: (params: PersonalityParams) => void;
   setSpeech: (speech: string | null) => void;
   setShowText: (show: boolean) => void;
+  setReminding: (reminding: boolean) => void;
+  setReminderEnabled: (enabled: boolean) => void;
 }
 
 type PetStore = PetState & PetStoreActions;
@@ -24,6 +26,8 @@ export const usePetStore = create<PetStore>((set) => ({
   personalityParams: BUILTIN_PARAMS.calm,
   speech: null,
   showText: true,
+  reminding: false,
+  reminderEnabled: true,
 
   setPosition: (x, y) => set({ position: { x, y } }),
   setAnimationState: (animationState) => set({ animationState }),
@@ -33,4 +37,6 @@ export const usePetStore = create<PetStore>((set) => ({
   setPersonalityParams: (personalityParams) => set({ personalityParams }),
   setSpeech: (speech) => set({ speech }),
   setShowText: (show) => set({ showText: show }),
+  setReminding: (reminding) => set({ reminding }),
+  setReminderEnabled: (enabled) => set({ reminderEnabled: enabled }),
 }));

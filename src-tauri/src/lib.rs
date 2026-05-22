@@ -21,14 +21,16 @@ struct PersonalityParams {
     speeches: Option<HashMap<String, Vec<String>>>,
 }
 
-fn default_show_text() -> bool { true }
+fn default_true() -> bool { true }
 
 #[derive(Serialize, Deserialize, Clone)]
 struct PersistedConfig {
     active_personality: String,
     custom_personalities: HashMap<String, PersonalityParams>,
-    #[serde(default = "default_show_text")]
+    #[serde(default = "default_true")]
     show_text: bool,
+    #[serde(default = "default_true")]
+    reminder_enabled: bool,
 }
 
 impl Default for PersistedConfig {
@@ -37,6 +39,7 @@ impl Default for PersistedConfig {
             active_personality: "calm".to_string(),
             custom_personalities: HashMap::new(),
             show_text: true,
+            reminder_enabled: true,
         }
     }
 }
@@ -204,8 +207,13 @@ fn rebuild_tray_menu(app: &tauri::AppHandle, config: &PersistedConfig) -> Result
     let show_hide = MenuItemBuilder::with_id("show_hide", "隐藏 猫咪")
         .build(app).map_err(|e| e.to_string())?;
     let toggle_text = {
-        let text = if config.show_text { "不显示文本" } else { "显示文本" };
+        let text = if config.show_text { "关闭文本" } else { "显示文本" };
         MenuItemBuilder::with_id("toggle_text", text)
+            .build(app).map_err(|e| e.to_string())?
+    };
+    let toggle_reminder = {
+        let text = if config.reminder_enabled { "关闭提醒" } else { "开启提醒" };
+        MenuItemBuilder::with_id("toggle_reminder", text)
             .build(app).map_err(|e| e.to_string())?
     };
     let manage = MenuItemBuilder::with_id("open_settings", "个性管理...")
@@ -220,6 +228,7 @@ fn rebuild_tray_menu(app: &tauri::AppHandle, config: &PersistedConfig) -> Result
         .separator()
         .item(&personality_submenu)
         .item(&toggle_text)
+        .item(&toggle_reminder)
         .item(&manage)
         .separator()
         .item(&restart)
@@ -290,8 +299,12 @@ pub fn run() {
 
             let manage = MenuItemBuilder::with_id("open_settings", "个性管理...").build(app)?;
             let toggle_text = {
-                let text = if config.show_text { "不显示文本" } else { "显示文本" };
+                let text = if config.show_text { "关闭文本" } else { "显示文本" };
                 MenuItemBuilder::with_id("toggle_text", text).build(app)?
+            };
+            let toggle_reminder = {
+                let text = if config.reminder_enabled { "关闭提醒" } else { "开启提醒" };
+                MenuItemBuilder::with_id("toggle_reminder", text).build(app)?
             };
             let restart = MenuItemBuilder::with_id("restart", "重启 应用").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
@@ -301,6 +314,7 @@ pub fn run() {
                 .separator()
                 .item(&personality_submenu)
                 .item(&toggle_text)
+                .item(&toggle_reminder)
                 .item(&manage)
                 .separator()
                 .item(&restart)
@@ -342,6 +356,15 @@ pub fn run() {
                             let _ = rebuild_tray_menu(app, &config);
                             if let Some(window) = app.get_webview_window("main") {
                                 window.emit("text-visibility-changed", config.show_text).ok();
+                            }
+                        }
+                        "toggle_reminder" => {
+                            let mut config = load_config(app);
+                            config.reminder_enabled = !config.reminder_enabled;
+                            save_config(app, &config);
+                            let _ = rebuild_tray_menu(app, &config);
+                            if let Some(window) = app.get_webview_window("main") {
+                                window.emit("reminder-toggled", config.reminder_enabled).ok();
                             }
                         }
                         "open_settings" => {
