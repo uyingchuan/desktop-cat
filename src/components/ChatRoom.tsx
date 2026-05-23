@@ -2,8 +2,11 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useChatStore } from '../stores/useChatStore';
+import { useMemoryStore } from '../stores/useMemoryStore';
 import { chatCompletion } from '../services/llm';
+import { extractMemories, formatMemoriesForPrompt } from '../services/memory';
 import type { PersonalityParams } from '../types/pet';
+import type { ChatMessage } from '../stores/useChatStore';
 import { BUILTIN_PARAMS, BUILTIN_PERSONALITIES } from '../types/pet';
 import './ChatRoom.css';
 
@@ -11,6 +14,8 @@ interface Config {
   active_personality: string;
   custom_personalities: Record<string, PersonalityParams>;
   deepseek_api_key?: string;
+  memories: string[];
+  conversations: Record<string, ChatMessage[]>;
 }
 
 function ChatRoom() {
@@ -21,16 +26,19 @@ function ChatRoom() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { conversations, addMessage, clearConversation } = useChatStore();
+  const { conversations, addMessage, clearConversation, loadConversations } = useChatStore();
+  const { memories, loadMemories, updateMemories } = useMemoryStore();
 
   const loadConfig = useCallback(() => {
     invoke<Config>('get_config')
       .then((c) => {
         setConfig(c);
         setActivePersonality(c.active_personality);
+        loadMemories(c.memories || []);
+        loadConversations(c.conversations || {});
       })
       .catch(() => {});
-  }, []);
+  }, [loadMemories, loadConversations]);
 
   useEffect(() => { loadConfig(); }, [loadConfig]);
 
@@ -71,7 +79,7 @@ function ChatRoom() {
 
     const history = conversations[activePersonality] || [];
     const messages = [
-      { role: 'system' as const, content: getSystemPrompt(activePersonality) },
+      { role: 'system' as const, content: getSystemPrompt(activePersonality) + formatMemoriesForPrompt(memories) },
       ...history,
       { role: 'user' as const, content: text },
     ];
@@ -79,12 +87,18 @@ function ChatRoom() {
     try {
       const reply = await chatCompletion(messages, config.deepseek_api_key);
       addMessage(activePersonality, { role: 'assistant', content: reply });
+
+      extractMemories(text, reply, memories, config.deepseek_api_key).then((newMemories) => {
+        if (JSON.stringify(newMemories) !== JSON.stringify(memories)) {
+          updateMemories(newMemories);
+        }
+      });
     } catch {
-      addMessage(activePersonality, { role: 'assistant', content: '呜...网络出问题了喵，等会再试吧~' });
+      addMessage(activePersonality, { role: 'assistant', content: '呜...网络出问题了喵，等会儿再试吧~' });
     } finally {
       setLoading(false);
     }
-  }, [input, loading, config, activePersonality, conversations, addMessage]);
+  }, [input, loading, config, activePersonality, memories, conversations, addMessage, updateMemories]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

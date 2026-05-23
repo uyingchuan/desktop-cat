@@ -12,6 +12,12 @@ use tauri::{
 // --- 数据结构 ---
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+struct ChatMessage {
+    role: String,
+    content: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct PersonalityParams {
     activity: u8,
     sleepiness: u8,
@@ -35,6 +41,10 @@ struct PersistedConfig {
     reminder_enabled: bool,
     #[serde(default)]
     deepseek_api_key: Option<String>,
+    #[serde(default)]
+    memories: Vec<String>,
+    #[serde(default)]
+    conversations: HashMap<String, Vec<ChatMessage>>,
 }
 
 impl Default for PersistedConfig {
@@ -45,6 +55,8 @@ impl Default for PersistedConfig {
             show_text: true,
             reminder_enabled: true,
             deepseek_api_key: None,
+            memories: Vec::new(),
+            conversations: HashMap::new(),
         }
     }
 }
@@ -184,6 +196,25 @@ fn set_api_key(app: tauri::AppHandle, key: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn save_memories(app: tauri::AppHandle, memories: Vec<String>) -> Result<(), String> {
+    let mut config = load_config(&app);
+    config.memories = memories;
+    save_config(&app, &config);
+    Ok(())
+}
+
+#[tauri::command]
+fn save_conversations(
+    app: tauri::AppHandle,
+    conversations: HashMap<String, Vec<ChatMessage>>,
+) -> Result<(), String> {
+    let mut config = load_config(&app);
+    config.conversations = conversations;
+    save_config(&app, &config);
+    Ok(())
+}
+
+#[tauri::command]
 fn open_chat(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("chat") {
         window.show().map_err(|e| e.to_string())?;
@@ -303,6 +334,8 @@ pub fn run() {
             open_settings,
             set_api_key,
             open_chat,
+            save_memories,
+            save_conversations,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
