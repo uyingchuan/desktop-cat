@@ -41,10 +41,6 @@ struct PersistedConfig {
     reminder_enabled: bool,
     #[serde(default)]
     deepseek_api_key: Option<String>,
-    #[serde(default)]
-    memories: Vec<String>,
-    #[serde(default)]
-    conversations: HashMap<String, Vec<ChatMessage>>,
 }
 
 impl Default for PersistedConfig {
@@ -55,8 +51,6 @@ impl Default for PersistedConfig {
             show_text: true,
             reminder_enabled: true,
             deepseek_api_key: None,
-            memories: Vec::new(),
-            conversations: HashMap::new(),
         }
     }
 }
@@ -85,6 +79,48 @@ fn save_config(app: &tauri::AppHandle, config: &PersistedConfig) {
         let config_path = config_dir.join("config.json");
         if let Ok(content) = serde_json::to_string_pretty(config) {
             fs::write(config_path, content).ok();
+        }
+    }
+}
+
+// --- 聊天数据持久化（独立文件）---
+
+#[derive(Serialize, Deserialize, Clone)]
+struct ChatData {
+    #[serde(default)]
+    conversations: HashMap<String, Vec<ChatMessage>>,
+    #[serde(default)]
+    memories: HashMap<String, Vec<String>>,
+}
+
+impl Default for ChatData {
+    fn default() -> Self {
+        Self {
+            conversations: HashMap::new(),
+            memories: HashMap::new(),
+        }
+    }
+}
+
+fn load_chat_data(app: &tauri::AppHandle) -> ChatData {
+    let config_dir = app.path().app_data_dir().unwrap_or_default();
+    let path = config_dir.join("chat_data.json");
+    if path.exists() {
+        if let Ok(content) = fs::read_to_string(&path) {
+            if let Ok(data) = serde_json::from_str::<ChatData>(&content) {
+                return data;
+            }
+        }
+    }
+    ChatData::default()
+}
+
+fn save_chat_data(app: &tauri::AppHandle, data: &ChatData) {
+    if let Ok(config_dir) = app.path().app_data_dir() {
+        fs::create_dir_all(&config_dir).ok();
+        let path = config_dir.join("chat_data.json");
+        if let Ok(content) = serde_json::to_string_pretty(data) {
+            fs::write(path, content).ok();
         }
     }
 }
@@ -196,10 +232,19 @@ fn set_api_key(app: tauri::AppHandle, key: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn save_memories(app: tauri::AppHandle, memories: Vec<String>) -> Result<(), String> {
-    let mut config = load_config(&app);
-    config.memories = memories;
-    save_config(&app, &config);
+fn get_chat_data(app: tauri::AppHandle) -> ChatData {
+    load_chat_data(&app)
+}
+
+#[tauri::command]
+fn save_memories(
+    app: tauri::AppHandle,
+    personality: String,
+    memories: Vec<String>,
+) -> Result<(), String> {
+    let mut data = load_chat_data(&app);
+    data.memories.insert(personality, memories);
+    save_chat_data(&app, &data);
     Ok(())
 }
 
@@ -208,9 +253,9 @@ fn save_conversations(
     app: tauri::AppHandle,
     conversations: HashMap<String, Vec<ChatMessage>>,
 ) -> Result<(), String> {
-    let mut config = load_config(&app);
-    config.conversations = conversations;
-    save_config(&app, &config);
+    let mut data = load_chat_data(&app);
+    data.conversations = conversations;
+    save_chat_data(&app, &data);
     Ok(())
 }
 
@@ -329,6 +374,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_personality,
             get_config,
+            get_chat_data,
             save_personality,
             delete_personality,
             open_settings,

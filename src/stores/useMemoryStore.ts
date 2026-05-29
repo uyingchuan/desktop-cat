@@ -2,21 +2,31 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 
 interface MemoryStore {
-  memories: string[];
+  memories: Record<string, string[]>;
   loaded: boolean;
-  loadMemories: (initial: string[]) => void;
-  updateMemories: (memories: string[]) => Promise<void>;
+  loadMemories: (initial: Record<string, string[]>) => void;
+  updateMemories: (personality: string, memories: string[]) => Promise<void>;
+  clearMemories: (personality: string) => Promise<void>;
 }
 
 export const useMemoryStore = create<MemoryStore>((set) => ({
-  memories: [],
+  memories: {},
   loaded: false,
 
-  loadMemories: (initial: string[]) =>
+  loadMemories: (initial: Record<string, string[]>) =>
     set({ memories: initial, loaded: true }),
 
-  updateMemories: async (memories: string[]) => {
-    set({ memories });
-    await invoke('save_memories', { memories }).catch(() => {});
+  updateMemories: async (personality: string, memories: string[]) => {
+    set((state) => ({
+      memories: { ...state.memories, [personality]: memories },
+    }));
+    await invoke('save_memories', { personality, memories }).catch(() => {});
+  },
+
+  clearMemories: async (personality: string) => {
+    set((state) => ({
+      memories: { ...state.memories, [personality]: [] },
+    }));
+    await invoke('save_memories', { personality, memories: [] as string[] }).catch(() => {});
   },
 }));

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import { useMemoryStore } from './useMemoryStore';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -44,6 +45,7 @@ export const useChatStore = create<ChatStore>((set) => ({
         [personality]: [],
       };
       persist(conversations);
+      useMemoryStore.getState().clearMemories(personality);
       return { conversations };
     }),
 }));

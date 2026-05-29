@@ -14,7 +14,10 @@ interface Config {
   active_personality: string;
   deepseek_api_key?: string;
   custom_personalities: Record<string, PersonalityParams>;
-  memories: string[];
+}
+
+interface ChatData {
+  memories: Record<string, string[]>;
   conversations: Record<string, ChatMessage[]>;
 }
 
@@ -32,12 +35,15 @@ function FloatingChatInput() {
 
   useEffect(() => {
     inputRef.current?.focus();
-    invoke<Config>('get_config')
-      .then((config) => {
+    Promise.all([
+      invoke<Config>('get_config'),
+      invoke<ChatData>('get_chat_data'),
+    ])
+      .then(([config, chatData]) => {
         setApiKey(config.deepseek_api_key || null);
         setPersonality(config.active_personality);
-        loadMemories(config.memories || []);
-        loadConversations(config.conversations || {});
+        loadMemories(chatData.memories || {});
+        loadConversations(chatData.conversations || {});
 
         let params: PersonalityParams | undefined;
         if (config.active_personality in BUILTIN_PARAMS) {
@@ -49,6 +55,10 @@ function FloatingChatInput() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!loading) inputRef.current?.focus();
+  }, [loading]);
 
   const doSend = useCallback(async () => {
     const text = input.trim();
@@ -63,9 +73,10 @@ function FloatingChatInput() {
     setLoading(true);
     addMessage(personality, { role: 'user', content: text });
 
+    const myMemories = memories[personality] || [];
     const history = conversations[personality] || [];
     const messages = [
-      { role: 'system' as const, content: systemPrompt + formatMemoriesForPrompt(memories) },
+      { role: 'system' as const, content: systemPrompt + formatMemoriesForPrompt(myMemories) },
       ...history,
       { role: 'user' as const, content: text },
     ];
@@ -75,9 +86,9 @@ function FloatingChatInput() {
       addMessage(personality, { role: 'assistant', content: reply });
       setSpeech(reply);
 
-      extractMemories(text, reply, memories, apiKey).then((newMemories) => {
-        if (JSON.stringify(newMemories) !== JSON.stringify(memories)) {
-          updateMemories(newMemories);
+      extractMemories(text, reply, myMemories, apiKey).then((newMemories) => {
+        if (JSON.stringify(newMemories) !== JSON.stringify(myMemories)) {
+          updateMemories(personality, newMemories);
         }
       });
     } catch {
@@ -110,7 +121,6 @@ function FloatingChatInput() {
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={loading ? '猫猫思考中...' : '说点什么...'}
-        disabled={loading}
       />
     </div>
   );

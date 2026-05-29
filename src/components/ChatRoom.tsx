@@ -14,7 +14,10 @@ interface Config {
   active_personality: string;
   custom_personalities: Record<string, PersonalityParams>;
   deepseek_api_key?: string;
-  memories: string[];
+}
+
+interface ChatData {
+  memories: Record<string, string[]>;
   conversations: Record<string, ChatMessage[]>;
 }
 
@@ -30,12 +33,15 @@ function ChatRoom() {
   const { memories, loadMemories, updateMemories } = useMemoryStore();
 
   const loadConfig = useCallback(() => {
-    invoke<Config>('get_config')
-      .then((c) => {
+    Promise.all([
+      invoke<Config>('get_config'),
+      invoke<ChatData>('get_chat_data'),
+    ])
+      .then(([c, chatData]) => {
         setConfig(c);
         setActivePersonality(c.active_personality);
-        loadMemories(c.memories || []);
-        loadConversations(c.conversations || {});
+        loadMemories(chatData.memories || {});
+        loadConversations(chatData.conversations || {});
       })
       .catch(() => {});
   }, [loadMemories, loadConversations]);
@@ -52,6 +58,10 @@ function ChatRoom() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversations, activePersonality]);
+
+  useEffect(() => {
+    if (!loading) inputRef.current?.focus();
+  }, [loading]);
 
   const allPersonalities = config
     ? [...BUILTIN_PERSONALITIES, ...Object.keys(config.custom_personalities)]
@@ -77,9 +87,10 @@ function ChatRoom() {
     setLoading(true);
     addMessage(activePersonality, { role: 'user', content: text });
 
+    const myMemories = memories[activePersonality] || [];
     const history = conversations[activePersonality] || [];
     const messages = [
-      { role: 'system' as const, content: getSystemPrompt(activePersonality) + formatMemoriesForPrompt(memories) },
+      { role: 'system' as const, content: getSystemPrompt(activePersonality) + formatMemoriesForPrompt(myMemories) },
       ...history,
       { role: 'user' as const, content: text },
     ];
@@ -88,9 +99,9 @@ function ChatRoom() {
       const reply = await chatCompletion(messages, config.deepseek_api_key);
       addMessage(activePersonality, { role: 'assistant', content: reply });
 
-      extractMemories(text, reply, memories, config.deepseek_api_key).then((newMemories) => {
-        if (JSON.stringify(newMemories) !== JSON.stringify(memories)) {
-          updateMemories(newMemories);
+      extractMemories(text, reply, myMemories, config.deepseek_api_key).then((newMemories) => {
+        if (JSON.stringify(newMemories) !== JSON.stringify(myMemories)) {
+          updateMemories(activePersonality, newMemories);
         }
       });
     } catch {
@@ -167,7 +178,7 @@ function ChatRoom() {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={loading ? '猫猫思考中...' : '输入消息...'}
-          disabled={loading || !config?.deepseek_api_key}
+          disabled={!config?.deepseek_api_key}
         />
         <button
           className="send-btn"
