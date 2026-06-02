@@ -4,6 +4,8 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { usePetStore } from '../stores/usePetStore';
 import { useTodoStore } from '../stores/useTodoStore';
+import { useChatStore } from '../stores/useChatStore';
+import { generateReminderMessage } from '../services/reminderChat';
 import type { PetAnimationState, PetPosition,   PersonalityParams } from '../types/pet';
 import { BUILTIN_PARAMS } from '../types/pet';
 
@@ -198,6 +200,8 @@ export function useCatBehavior() {
   const appWindow = useRef(getCurrentWindow());
   const reminderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reminderLoopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const apiKeyRef = useRef<string | undefined>(undefined);
+  const chatTriggeredRef = useRef(false);
 
   // 切换人格时同步更新 params
   const applyPersonality = (name: string) => {
@@ -243,14 +247,24 @@ export function useCatBehavior() {
     return () => { unlisten.then((fn) => fn()); };
   }, [setReminderEnabled, setReminding]);
 
+  // 监听来自 Rust 的待办提醒事件（接入 AI 聊天 + 托盘闪烁）
+  useEffect(() => {
+    const unlisten = listen<string>('reminder-triggered', (event) => {
+      // eslint-disable-next-line react-hooks/immutability
+      triggerReminderChat(event.payload);
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
   // 启动时从 Rust 命令拉取持久化的猫格
   useEffect(() => {
-    invoke<{ active_personality: string; custom_personalities: Record<string, PersonalityParams>; show_text: boolean; reminder_enabled: boolean }>('get_config')
+    invoke<{ active_personality: string; custom_personalities: Record<string, PersonalityParams>; show_text: boolean; reminder_enabled: boolean; deepseek_api_key?: string }>('get_config')
       .then((config) => {
         const name = config.active_personality;
         setPersonality(name);
         setShowText(config.show_text);
         setReminderEnabled(config.reminder_enabled);
+        apiKeyRef.current = config.deepseek_api_key;
         if (name in BUILTIN_PARAMS) {
           setPersonalityParams(BUILTIN_PARAMS[name]);
         } else if (config.custom_personalities[name]) {
@@ -438,9 +452,26 @@ export function useCatBehavior() {
     }
   }, [animationState, reminding, chatting]);
 
+  // 触发 AI 提醒消息：LLM 生成 → 加入聊天历史 → 托盘闪烁
+  const triggerReminderChat = (reminderText: string) => {
+    const apiKey = apiKeyRef.current;
+    if (!apiKey) return;
+    const petState = usePetStore.getState();
+    generateReminderMessage(
+      reminderText,
+      petState.personality,
+      petState.personalityParams,
+      apiKey,
+    ).then((reply) => {
+      useChatStore.getState().addMessage(petState.personality, { role: 'assistant', content: reply });
+      invoke('set_tray_alert', { message: reply }).catch(() => {});
+    }).catch(() => {});
+  };
+
   // 提醒模式循环：走动 → 待机 → 说话 → 延迟 → 走动 ...
   useEffect(() => {
     if (!reminding) {
+      chatTriggeredRef.current = false;
       if (reminderLoopRef.current) {
         clearTimeout(reminderLoopRef.current);
         reminderLoopRef.current = null;
@@ -505,6 +536,12 @@ export function useCatBehavior() {
     // 清除当前动作，开始提醒循环
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
     if (moveRafRef.current) { cancelAnimationFrame(moveRafRef.current); moveRafRef.current = null; }
+
+    // 首次触发 AI 提醒消息
+    if (!chatTriggeredRef.current) {
+      chatTriggeredRef.current = true;
+      triggerReminderChat('该休息一下了');
+    }
 
     remindWalk();
 

@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{
     image::Image,
@@ -80,6 +81,9 @@ impl Default for PersistedConfig {
 
 struct PersonalityState(Mutex<String>);
 struct TrayHandle(Arc<Mutex<Option<tauri::tray::TrayIcon>>>);
+struct TrayAlertState {
+    flashing: Arc<AtomicBool>,
+}
 
 // --- 配置持久化 ---
 
@@ -449,6 +453,68 @@ fn rebuild_tray_menu(app: &tauri::AppHandle, config: &PersistedConfig) -> Result
     Ok(())
 }
 
+// --- 托盘提醒闪烁控制 ---
+
+#[tauri::command]
+fn set_tray_alert(app: tauri::AppHandle, message: String) {
+    let tray_state = app.state::<TrayHandle>();
+    let alert_state = app.state::<TrayAlertState>();
+
+    if message.is_empty() {
+        // 停止闪烁
+        alert_state.flashing.store(false, Ordering::SeqCst);
+        if let Ok(guard) = tray_state.0.lock() {
+            if let Some(ref tray) = *guard {
+                if let Ok(normal) = Image::from_bytes(include_bytes!("../icons/32x32.png")) {
+                    tray.set_icon(Some(normal)).ok();
+                }
+                tray.set_tooltip(Some("")).ok();
+            }
+        }
+    } else {
+        // 开始闪烁
+        alert_state.flashing.store(true, Ordering::SeqCst);
+        let tray_handle = tray_state.0.clone();
+        let flashing = alert_state.flashing.clone();
+
+        // 设置 tooltip
+        if let Ok(guard) = tray_handle.lock() {
+            if let Some(ref tray) = *guard {
+                tray.set_tooltip(Some(&message)).ok();
+            }
+        }
+
+        // 后台线程：正常图标 ↔ 空图标交替闪烁
+        std::thread::spawn(move || {
+            let normal = Image::from_bytes(include_bytes!("../icons/32x32.png")).ok();
+            let mut show_normal = true;
+            while flashing.load(Ordering::SeqCst) {
+                show_normal = !show_normal;
+                if let Ok(guard) = tray_handle.lock() {
+                    if let Some(ref tray) = *guard {
+                        if show_normal {
+                            if let Some(ref n) = normal {
+                                tray.set_icon(Some(n.clone())).ok();
+                            }
+                        } else {
+                            tray.set_icon(None).ok();
+                        }
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(600));
+            }
+            // 恢复正常图标
+            if let Ok(guard) = tray_handle.lock() {
+                if let Some(ref tray) = *guard {
+                    if let Some(ref n) = normal {
+                        tray.set_icon(Some(n.clone())).ok();
+                    }
+                }
+            }
+        });
+    }
+}
+
 // --- 待办提醒后台检查 ---
 
 fn check_todo_reminders(app: &tauri::AppHandle) {
@@ -470,7 +536,7 @@ fn check_todo_reminders(app: &tauri::AppHandle) {
     }
 
     if !fired.is_empty() {
-        // 发送通知
+        // 发送通知 + 通知主窗口（用于 AI 聊天集成）
         for (_id, text) in &fired {
             let _ = app
                 .notification()
@@ -478,6 +544,10 @@ fn check_todo_reminders(app: &tauri::AppHandle) {
                 .title("备忘录提醒")
                 .body(text)
                 .show();
+            // 通知主窗口
+            if let Some(window) = app.get_webview_window("main") {
+                window.emit("reminder-triggered", text).ok();
+            }
         }
 
         // 重新加载数据再修改，避免覆盖并发的用户保存
@@ -503,6 +573,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(PersonalityState(Mutex::new("calm".to_string())))
         .manage(TrayHandle(Arc::new(Mutex::new(None))))
+        .manage(TrayAlertState { flashing: Arc::new(AtomicBool::new(false)) })
         .invoke_handler(tauri::generate_handler![
             get_personality,
             get_config,
@@ -517,6 +588,7 @@ pub fn run() {
             get_todo_data,
             save_todo_items,
             open_todo,
+            set_tray_alert,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

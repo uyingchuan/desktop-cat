@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { useCatBehavior } from '../hooks/useCatBehavior';
 import { usePetStore } from '../stores/usePetStore';
 import CatSprite from './CatSprite';
@@ -19,6 +20,7 @@ function Cat() {
     if (state.reminding) {
       state.setReminding(false);
       state.setSpeech('知道啦~继续工作吧!');
+      invoke('set_tray_alert', { message: '' }).catch(() => {});
       return;
     }
     if (state.chatting) {
