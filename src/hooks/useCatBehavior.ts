@@ -250,6 +250,7 @@ export function useCatBehavior() {
   // 监听来自 Rust 的待办提醒事件（接入 AI 聊天 + 托盘闪烁）
   useEffect(() => {
     const unlisten = listen<string>('reminder-triggered', (event) => {
+      if (!usePetStore.getState().reminderEnabled) return;
       // eslint-disable-next-line react-hooks/immutability
       triggerReminderChat(event.payload);
     });

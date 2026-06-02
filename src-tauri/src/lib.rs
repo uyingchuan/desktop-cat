@@ -787,7 +787,37 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                        let app = tray.app_handle();
+                        // 托盘闪烁时：打开聊天室并停止闪烁
+                        let alert_state = app.state::<TrayAlertState>();
+                        if alert_state.flashing.load(Ordering::SeqCst) {
+                            // 停止闪烁
+                            alert_state.flashing.store(false, Ordering::SeqCst);
+                            if let Ok(tray_guard) = app.state::<TrayHandle>().0.lock() {
+                                if let Some(ref t) = *tray_guard {
+                                    if let Ok(icon) = Image::from_bytes(include_bytes!("../icons/32x32.png")) {
+                                        t.set_icon(Some(icon)).ok();
+                                    }
+                                    t.set_tooltip(Some("")).ok();
+                                }
+                            }
+                            // 打开聊天室
+                            if let Some(window) = app.get_webview_window("chat") {
+                                window.show().ok();
+                                window.set_focus().ok();
+                            } else {
+                                let _ = WebviewWindowBuilder::new(
+                                    app,
+                                    "chat",
+                                    WebviewUrl::App("/#/chat".into()),
+                                )
+                                .title("聊天室")
+                                .inner_size(400.0, 560.0)
+                                .resizable(true)
+                                .decorations(true)
+                                .build();
+                            }
+                        } else if let Some(window) = app.get_webview_window("main") {
                             if window.is_visible().unwrap_or(true) {
                                 window.hide().ok();
                                 show_hide.set_text("显示 猫咪").ok();
