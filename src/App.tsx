@@ -1,6 +1,7 @@
 import Cat from './components/Cat';
 import PersonalityEditor from './components/PersonalityEditor';
 import ChatRoom from './components/ChatRoom';
+import TodoPanel from './components/TodoPanel';
 import './App.css';
 
 function App() {
@@ -10,6 +11,9 @@ function App() {
   }
   if (hash === '#/chat') {
     return <ChatRoom />;
+  }
+  if (hash === '#/todo') {
+    return <TodoPanel />;
   }
   return <Cat />;
 }

@@ -3,6 +3,7 @@ import { getCurrentWindow, LogicalPosition } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { usePetStore } from '../stores/usePetStore';
+import { useTodoStore } from '../stores/useTodoStore';
 import type { PetAnimationState, PetPosition,   PersonalityParams } from '../types/pet';
 import { BUILTIN_PARAMS } from '../types/pet';
 
@@ -470,7 +471,11 @@ export function useCatBehavior() {
           moveRafRef.current = null;
           // 到达 → 待机 + 说话
           setAnimationState('idle');
-          const msg = REMINDER_SPEECHES[Math.floor(Math.random() * REMINDER_SPEECHES.length)];
+          const todoState = useTodoStore.getState();
+          const pendingCount = todoState.items.filter((i) => !i.completed).length;
+          const msg = pendingCount > 0
+            ? `你还有 ${pendingCount} 条待办事项未完成喵~`
+            : REMINDER_SPEECHES[Math.floor(Math.random() * REMINDER_SPEECHES.length)];
           setSpeech(msg);
           // 说话显示 2.5s 后短暂延迟，然后继续走动
           reminderLoopRef.current = setTimeout(() => {

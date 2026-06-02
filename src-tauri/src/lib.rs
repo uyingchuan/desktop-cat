@@ -18,6 +18,26 @@ struct ChatMessage {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+struct TodoItem {
+    id: String,
+    text: String,
+    completed: bool,
+    created_at: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct TodoData {
+    #[serde(default)]
+    items: Vec<TodoItem>,
+}
+
+impl Default for TodoData {
+    fn default() -> Self {
+        Self { items: Vec::new() }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct PersonalityParams {
     activity: u8,
     sleepiness: u8,
@@ -119,6 +139,29 @@ fn save_chat_data(app: &tauri::AppHandle, data: &ChatData) {
     if let Ok(config_dir) = app.path().app_data_dir() {
         fs::create_dir_all(&config_dir).ok();
         let path = config_dir.join("chat_data.json");
+        if let Ok(content) = serde_json::to_string_pretty(data) {
+            fs::write(path, content).ok();
+        }
+    }
+}
+
+fn load_todo_data(app: &tauri::AppHandle) -> TodoData {
+    let config_dir = app.path().app_data_dir().unwrap_or_default();
+    let path = config_dir.join("todo_data.json");
+    if path.exists() {
+        if let Ok(content) = fs::read_to_string(&path) {
+            if let Ok(data) = serde_json::from_str::<TodoData>(&content) {
+                return data;
+            }
+        }
+    }
+    TodoData::default()
+}
+
+fn save_todo_data(app: &tauri::AppHandle, data: &TodoData) {
+    if let Ok(config_dir) = app.path().app_data_dir() {
+        fs::create_dir_all(&config_dir).ok();
+        let path = config_dir.join("todo_data.json");
         if let Ok(content) = serde_json::to_string_pretty(data) {
             fs::write(path, content).ok();
         }
@@ -260,6 +303,42 @@ fn save_conversations(
 }
 
 #[tauri::command]
+fn get_todo_data(app: tauri::AppHandle) -> TodoData {
+    load_todo_data(&app)
+}
+
+#[tauri::command]
+fn save_todo_items(
+    app: tauri::AppHandle,
+    items: Vec<TodoItem>,
+) -> Result<(), String> {
+    let data = TodoData { items };
+    save_todo_data(&app, &data);
+    Ok(())
+}
+
+#[tauri::command]
+fn open_todo(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("todo") {
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+    } else {
+        let _ = WebviewWindowBuilder::new(
+            &app,
+            "todo",
+            WebviewUrl::App("/#/todo".into()),
+        )
+        .title("备忘录")
+        .inner_size(360.0, 500.0)
+        .resizable(true)
+        .decorations(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn open_chat(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("chat") {
         window.show().map_err(|e| e.to_string())?;
@@ -330,6 +409,8 @@ fn rebuild_tray_menu(app: &tauri::AppHandle, config: &PersistedConfig) -> Result
         .build(app).map_err(|e| e.to_string())?;
     let chat = MenuItemBuilder::with_id("open_chat", "聊天室")
         .build(app).map_err(|e| e.to_string())?;
+    let todo = MenuItemBuilder::with_id("open_todo", "备忘录")
+        .build(app).map_err(|e| e.to_string())?;
     let restart = MenuItemBuilder::with_id("restart", "重启 应用")
         .build(app).map_err(|e| e.to_string())?;
     let quit = MenuItemBuilder::with_id("quit", "退出")
@@ -343,6 +424,7 @@ fn rebuild_tray_menu(app: &tauri::AppHandle, config: &PersistedConfig) -> Result
         .item(&toggle_reminder)
         .item(&manage)
         .item(&chat)
+        .item(&todo)
         .separator()
         .item(&restart)
         .item(&quit)
@@ -382,6 +464,9 @@ pub fn run() {
             open_chat,
             save_memories,
             save_conversations,
+            get_todo_data,
+            save_todo_items,
+            open_todo,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -417,6 +502,7 @@ pub fn run() {
 
             let manage = MenuItemBuilder::with_id("open_settings", "个性管理...").build(app)?;
             let chat = MenuItemBuilder::with_id("open_chat", "聊天室").build(app)?;
+            let todo_menu = MenuItemBuilder::with_id("open_todo", "备忘录").build(app)?;
             let toggle_text = {
                 let text = if config.show_text { "关闭文本" } else { "显示文本" };
                 MenuItemBuilder::with_id("toggle_text", text).build(app)?
@@ -436,6 +522,7 @@ pub fn run() {
                 .item(&toggle_reminder)
                 .item(&manage)
                 .item(&chat)
+                .item(&todo_menu)
                 .separator()
                 .item(&restart)
                 .item(&quit)
@@ -518,6 +605,24 @@ pub fn run() {
                                 )
                                 .title("聊天室")
                                 .inner_size(400.0, 560.0)
+                                .resizable(true)
+                                .decorations(true)
+                                .build();
+                            }
+                        }
+                        "open_todo" => {
+                            if let Some(window) = app.get_webview_window("todo") {
+                                window.show().ok();
+                                window.set_focus().ok();
+                            } else {
+                                let app_ref: &tauri::AppHandle = &app;
+                                let _ = WebviewWindowBuilder::new(
+                                    app_ref,
+                                    "todo",
+                                    WebviewUrl::App("/#/todo".into()),
+                                )
+                                .title("备忘录")
+                                .inner_size(360.0, 500.0)
                                 .resizable(true)
                                 .decorations(true)
                                 .build();
