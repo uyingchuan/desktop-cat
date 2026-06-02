@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
@@ -23,6 +24,8 @@ struct TodoItem {
     text: String,
     completed: bool,
     created_at: i64,
+    #[serde(default)]
+    remind_at: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -446,11 +449,58 @@ fn rebuild_tray_menu(app: &tauri::AppHandle, config: &PersistedConfig) -> Result
     Ok(())
 }
 
+// --- 待办提醒后台检查 ---
+
+fn check_todo_reminders(app: &tauri::AppHandle) {
+    use tauri_plugin_notification::NotificationExt;
+    let data = load_todo_data(app);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    // 收集所有到期提醒的 id 和文本
+    let mut fired: Vec<(String, String)> = Vec::new();
+    for item in &data.items {
+        if let Some(remind_at) = item.remind_at {
+            if remind_at <= now {
+                fired.push((item.id.clone(), item.text.clone()));
+            }
+        }
+    }
+
+    if !fired.is_empty() {
+        // 发送通知
+        for (_id, text) in &fired {
+            let _ = app
+                .notification()
+                .builder()
+                .title("备忘录提醒")
+                .body(text)
+                .show();
+        }
+
+        // 重新加载数据再修改，避免覆盖并发的用户保存
+        let fired_ids: Vec<String> = fired.into_iter().map(|(id, _)| id).collect();
+        let mut data = load_todo_data(app);
+        for item in &mut data.items {
+            if fired_ids.contains(&item.id) {
+                item.remind_at = None;
+            }
+        }
+        save_todo_data(app, &data);
+        if let Some(window) = app.get_webview_window("todo") {
+            window.emit("todo-reminder-fired", ()).ok();
+        }
+    }
+}
+
 // --- 程序入口 ---
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .manage(PersonalityState(Mutex::new("calm".to_string())))
         .manage(TrayHandle(Arc::new(Mutex::new(None))))
         .invoke_handler(tauri::generate_handler![
@@ -680,6 +730,18 @@ pub fn run() {
 
             // 存储托盘句柄以便后续动态重建菜单
             *app.state::<TrayHandle>().0.lock().unwrap() = Some(tray);
+
+            // 启动时检查错过的提醒
+            let app_handle = app.handle().clone();
+            check_todo_reminders(&app_handle);
+
+            // 后台线程每 30 秒检查一次
+            std::thread::spawn(move || {
+                loop {
+                    std::thread::sleep(Duration::from_secs(30));
+                    check_todo_reminders(&app_handle);
+                }
+            });
 
             Ok(())
         })

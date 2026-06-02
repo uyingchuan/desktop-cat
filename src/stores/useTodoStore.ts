@@ -8,10 +8,14 @@ interface TodoStore {
   addItem: (text: string) => void;
   toggleItem: (id: string) => void;
   deleteItem: (id: string) => void;
+  setReminder: (id: string, remindAt: number) => void;
+  clearReminder: (id: string) => void;
 }
 
 function persist(items: TodoItem[]) {
-  invoke('save_todo_items', { items }).catch(() => {});
+  invoke('save_todo_items', { items }).catch((e) => {
+    console.error('save_todo_items failed:', e);
+  });
 }
 
 export const useTodoStore = create<TodoStore>((set) => ({
@@ -26,8 +30,9 @@ export const useTodoStore = create<TodoStore>((set) => ({
         text,
         completed: false,
         created_at: Math.floor(Date.now() / 1000),
+        remind_at: null,
       };
-      const items = [...state.items, newItem];
+      const items = [newItem, ...state.items];
       persist(items);
       return { items };
     }),
@@ -44,6 +49,24 @@ export const useTodoStore = create<TodoStore>((set) => ({
   deleteItem: (id) =>
     set((state) => {
       const items = state.items.filter((item) => item.id !== id);
+      persist(items);
+      return { items };
+    }),
+
+  setReminder: (id, remindAt) =>
+    set((state) => {
+      const items = state.items.map((item) =>
+        item.id === id ? { ...item, remind_at: remindAt } : item
+      );
+      persist(items);
+      return { items };
+    }),
+
+  clearReminder: (id) =>
+    set((state) => {
+      const items = state.items.map((item) =>
+        item.id === id ? { ...item, remind_at: null } : item
+      );
       persist(items);
       return { items };
     }),
