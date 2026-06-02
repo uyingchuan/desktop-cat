@@ -93,6 +93,17 @@
   font-style: italic;
 }
 
+.chat-time {
+  font-size: 11px;
+  color: #999;
+  margin-top: 4px;
+  text-align: right;
+}
+
+.chat-msg.assistant .chat-time {
+  color: #bbb;
+}
+
 .chat-input-bar {
   display: flex;
   gap: 8px;

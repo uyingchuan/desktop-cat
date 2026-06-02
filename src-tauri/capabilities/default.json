@@ -5,7 +5,8 @@
   "windows": [
     "main",
     "settings",
-    "todo"
+    "todo",
+    "chat"
   ],
   "permissions": [
     "core:default",

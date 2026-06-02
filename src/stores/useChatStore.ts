@@ -5,6 +5,7 @@ import { useMemoryStore } from './useMemoryStore';
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  timestamp: number;  // Unix 时间戳（秒）
 }
 
 const MAX_MESSAGES = 100;
@@ -12,7 +13,7 @@ const MAX_MESSAGES = 100;
 interface ChatStore {
   conversations: Record<string, ChatMessage[]>;
   loadConversations: (conversations: Record<string, ChatMessage[]>) => void;
-  addMessage: (personality: string, msg: ChatMessage) => void;
+  addMessage: (personality: string, msg: { role: 'user' | 'assistant'; content: string; timestamp?: number }) => void;
   clearConversation: (personality: string) => void;
 }
 
@@ -29,7 +30,8 @@ export const useChatStore = create<ChatStore>((set) => ({
   addMessage: (personality, msg) =>
     set((state) => {
       const history = state.conversations[personality] || [];
-      const updated = [...history.slice(-(MAX_MESSAGES - 1)), msg];
+      const stamped: ChatMessage = { ...msg, timestamp: msg.timestamp ?? Math.floor(Date.now() / 1000) };
+      const updated = [...history.slice(-(MAX_MESSAGES - 1)), stamped];
       const conversations = {
         ...state.conversations,
         [personality]: updated,

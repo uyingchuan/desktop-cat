@@ -247,6 +247,14 @@ export function useCatBehavior() {
     return () => { unlisten.then((fn) => fn()); };
   }, [setReminderEnabled, setReminding]);
 
+  // 托盘闪烁时点击托盘图标 → 退出提醒状态
+  useEffect(() => {
+    const unlisten = listen('reminder-dismissed', () => {
+      usePetStore.getState().setReminding(false);
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
   // 监听来自 Rust 的待办提醒事件（接入 AI 聊天 + 托盘闪烁）
   useEffect(() => {
     const unlisten = listen<string>('reminder-triggered', (event) => {
@@ -464,7 +472,18 @@ export function useCatBehavior() {
       petState.personalityParams,
       apiKey,
     ).then((reply) => {
-      useChatStore.getState().addMessage(petState.personality, { role: 'assistant', content: reply });
+      // 主窗口的 useChatStore 未加载数据，先从磁盘同步再追加消息，避免覆盖聊天记录
+      invoke<{ conversations: Record<string, import('../stores/useChatStore').ChatMessage[]> }>('get_chat_data')
+        .then((chatData) => {
+          const store = useChatStore.getState();
+          store.loadConversations(chatData.conversations || {});
+          store.addMessage(petState.personality, { role: 'assistant', content: reply });
+        })
+        .catch(() => {
+          useChatStore.getState().addMessage(petState.personality, { role: 'assistant', content: reply });
+        });
+      // 通过 Rust 全局事件通知所有窗口有新消息
+      invoke('broadcast_chat_message', { personality: petState.personality, content: reply }).catch(() => {});
       invoke('set_tray_alert', { message: reply }).catch(() => {});
     }).catch(() => {});
   };

@@ -263,3 +263,49 @@
 .todo-reminder-cancel-btn:hover {
   background: #f0f0f0;
 }
+
+/* 重复选择器 */
+.todo-repeat-select {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  outline: none;
+  font-family: inherit;
+  background: #fff;
+  cursor: pointer;
+}
+
+.todo-repeat-select:focus {
+  border-color: #07c160;
+}
+
+.todo-interval-row {
+  display: flex;
+  gap: 6px;
+}
+
+.todo-interval-input {
+  width: 80px;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  outline: none;
+  font-family: inherit;
+}
+
+.todo-interval-input:focus {
+  border-color: #07c160;
+}
+
+.todo-interval-unit {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  outline: none;
+  font-family: inherit;
+  background: #fff;
+  cursor: pointer;
+}

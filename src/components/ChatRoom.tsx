@@ -55,6 +55,21 @@ function ChatRoom() {
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
+  // 托盘闪烁时点击 → 重新加载对话
+  useEffect(() => {
+    const unlisten = listen('chat-reload', () => { loadConfig(); });
+    return () => { unlisten.then((fn) => fn()); };
+  }, [loadConfig]);
+
+  // 提醒触发时 → 实时注入新消息，无需等磁盘 IO
+  useEffect(() => {
+    const unlisten = listen<{ personality: string; content: string }>('chat-new-message', (event) => {
+      const { personality, content } = event.payload;
+      useChatStore.getState().addMessage(personality, { role: 'assistant', content });
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversations, activePersonality]);
@@ -158,7 +173,14 @@ function ChatRoom() {
         )}
         {currentMessages.map((msg, i) => (
           <div key={i} className={`chat-msg ${msg.role}`}>
-            <div className="chat-bubble">{msg.content}</div>
+            <div className="chat-bubble">
+              {msg.content}
+              {msg.timestamp > 0 && (
+                <div className="chat-time">
+                  {new Date(msg.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              )}
+            </div>
           </div>
         ))}
         {loading && (

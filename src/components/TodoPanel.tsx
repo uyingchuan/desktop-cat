@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useTodoStore } from '../stores/useTodoStore';
 import type { TodoItem } from '../types/todo';
+import type { RepeatType } from '../types/todo';
 import './TodoPanel.css';
 
 /** 将 Date 格式化为 datetime-local 输入所需的本地时间字符串 YYYY-MM-DDTHH:MM */
@@ -58,8 +59,8 @@ function TodoPanel() {
     [handleAdd],
   );
 
-  const handleSetReminder = useCallback((id: string, remindAt: number) => {
-    setReminder(id, remindAt);
+  const handleSetReminder = useCallback((id: string, remindAt: number, repeatType: RepeatType, repeatInterval: number | null) => {
+    setReminder(id, remindAt, repeatType, repeatInterval);
     setEditingReminderId(null);
   }, [setReminder]);
 
@@ -143,7 +144,7 @@ interface TodoItemRowProps {
   editingReminder: boolean;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
-  onSetReminder: (id: string, remindAt: number) => void;
+  onSetReminder: (id: string, remindAt: number, repeatType: RepeatType, repeatInterval: number | null) => void;
   onClearReminder: (id: string) => void;
   onStartEditReminder: () => void;
   onCancelEditReminder: () => void;
@@ -168,22 +169,37 @@ function TodoItemRow({
     ? `${reminderDate.getMonth() + 1}/${reminderDate.getDate()} ${String(reminderDate.getHours()).padStart(2, '0')}:${String(reminderDate.getMinutes()).padStart(2, '0')}`
     : '';
 
-  const handleReminderConfirm = () => {
-    const input = document.getElementById(`reminder-input-${item.id}`) as HTMLInputElement;
-    if (input && input.value) {
-      const dt = new Date(input.value);
-      onSetReminder(item.id, Math.floor(dt.getTime() / 1000));
-    }
-  };
+  const repeatLabel = item.repeat_type === 'daily' ? ' 📅每天' : item.repeat_type === 'interval' ? ' 🔄间隔' : '';
 
-  // 格式化 datetime-local 的默认值（使用本地时间）
-  const getDefaultDatetime = () => {
-    if (hasReminder) {
-      return toDatetimeLocal(new Date(item.remind_at! * 1000));
+  const handleReminderConfirm = () => {
+    const repeatSelect = document.getElementById(`repeat-select-${item.id}`) as HTMLSelectElement;
+    const repeatType: RepeatType = (repeatSelect?.value as RepeatType) || 'once';
+
+    let remindAt = 0;
+    let repeatInterval: number | null = null;
+
+    if (repeatType === 'daily') {
+      const timeInput = document.getElementById(`reminder-time-${item.id}`) as HTMLInputElement;
+      if (!timeInput?.value) return;
+      const [h, m] = timeInput.value.split(':').map(Number);
+      const now = new Date();
+      remindAt = Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0).getTime() / 1000);
+      if (remindAt <= Date.now() / 1000) remindAt += 86400;
+    } else if (repeatType === 'interval') {
+      const intervalInput = document.getElementById(`reminder-interval-${item.id}`) as HTMLInputElement;
+      const unitSelect = document.getElementById(`interval-unit-${item.id}`) as HTMLSelectElement;
+      if (!intervalInput?.value) return;
+      const val = Number(intervalInput.value);
+      const unit = unitSelect?.value || 'min';
+      repeatInterval = unit === 'hour' ? val * 3600 : val * 60;
+      remindAt = Math.floor(Date.now() / 1000) + repeatInterval;
+    } else {
+      const dtInput = document.getElementById(`reminder-dt-${item.id}`) as HTMLInputElement;
+      if (!dtInput?.value) return;
+      remindAt = Math.floor(new Date(dtInput.value).getTime() / 1000);
     }
-    // 默认设为当前时间 + 30 分钟
-    // eslint-disable-next-line react-hooks/purity
-    return toDatetimeLocal(new Date(Date.now() + 30 * 60 * 1000));
+
+    onSetReminder(item.id, remindAt, repeatType, repeatInterval);
   };
 
   return (
@@ -207,7 +223,7 @@ function TodoItemRow({
                 onClick={() => onClearReminder(item.id)}
                 title="点击取消提醒"
               >
-                🔔 {reminderTimeStr}
+                🔔 {reminderTimeStr}{repeatLabel}
               </span>
             )}
           </div>
@@ -228,25 +244,111 @@ function TodoItemRow({
         </button>
       </div>
 
-      {editingReminder && (
-        <div className="todo-reminder-popover">
+      {editingReminder && <ReminderPopover item={item} onConfirm={handleReminderConfirm} onCancel={onCancelEditReminder} />}
+    </>
+  );
+}
+
+interface ReminderPopoverProps {
+  item: TodoItem;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function ReminderPopover({ item, onConfirm, onCancel }: ReminderPopoverProps) {
+  const hasReminder = item.remind_at != null;
+  const [repeatType, setRepeatType] = useState<RepeatType>(item.repeat_type || 'once');
+
+  const getDefaultDatetime = () => {
+    if (hasReminder && item.repeat_type === 'once') {
+      return toDatetimeLocal(new Date(item.remind_at! * 1000));
+    }
+    return toDatetimeLocal(new Date(Date.now() + 30 * 60 * 1000));
+  };
+
+  const getDefaultTime = () => {
+    if (hasReminder) {
+      const d = new Date(item.remind_at! * 1000);
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+    const d = new Date(Date.now() + 30 * 60 * 1000);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
+
+  const getDefaultInterval = () => {
+    if (hasReminder && item.repeat_interval != null) {
+      return item.repeat_interval >= 3600 && item.repeat_interval % 3600 === 0
+        ? String(item.repeat_interval / 3600)
+        : String(item.repeat_interval / 60);
+    }
+    return '30';
+  };
+
+  const getDefaultIntervalUnit = () => {
+    if (hasReminder && item.repeat_interval != null) {
+      return item.repeat_interval >= 3600 && item.repeat_interval % 3600 === 0 ? 'hour' : 'min';
+    }
+    return 'min';
+  };
+
+  return (
+    <div className="todo-reminder-popover">
+      <select
+        id={`repeat-select-${item.id}`}
+        className="todo-repeat-select"
+        value={repeatType}
+        onChange={(e) => setRepeatType(e.target.value as RepeatType)}
+      >
+        <option value="once">仅一次</option>
+        <option value="daily">每天</option>
+        <option value="interval">间隔</option>
+      </select>
+
+      {repeatType === 'once' && (
+        <input
+          id={`reminder-dt-${item.id}`}
+          className="todo-datetime-input"
+          type="datetime-local"
+          defaultValue={getDefaultDatetime()}
+        />
+      )}
+      {repeatType === 'daily' && (
+        <input
+          id={`reminder-time-${item.id}`}
+          className="todo-datetime-input"
+          type="time"
+          defaultValue={getDefaultTime()}
+        />
+      )}
+      {repeatType === 'interval' && (
+        <div className="todo-interval-row">
           <input
-            id={`reminder-input-${item.id}`}
-            className="todo-datetime-input"
-            type="datetime-local"
-            defaultValue={getDefaultDatetime()}
+            id={`reminder-interval-${item.id}`}
+            className="todo-interval-input"
+            type="number"
+            min="1"
+            defaultValue={getDefaultInterval()}
           />
-          <div className="todo-reminder-popover-actions">
-            <button className="todo-reminder-confirm-btn" onClick={handleReminderConfirm}>
-              设置提醒
-            </button>
-            <button className="todo-reminder-cancel-btn" onClick={onCancelEditReminder}>
-              取消
-            </button>
-          </div>
+          <select
+            id={`interval-unit-${item.id}`}
+            className="todo-interval-unit"
+            defaultValue={getDefaultIntervalUnit()}
+          >
+            <option value="min">分钟</option>
+            <option value="hour">小时</option>
+          </select>
         </div>
       )}
-    </>
+
+      <div className="todo-reminder-popover-actions">
+        <button className="todo-reminder-confirm-btn" onClick={onConfirm}>
+          设置提醒
+        </button>
+        <button className="todo-reminder-cancel-btn" onClick={onCancel}>
+          取消
+        </button>
+      </div>
+    </div>
   );
 }
 

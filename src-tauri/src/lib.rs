@@ -17,7 +17,11 @@ use tauri::{
 struct ChatMessage {
     role: String,
     content: String,
+    #[serde(default)]
+    timestamp: i64,
 }
+
+fn default_repeat_type() -> String { "once".to_string() }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct TodoItem {
@@ -27,6 +31,10 @@ struct TodoItem {
     created_at: i64,
     #[serde(default)]
     remind_at: Option<i64>,
+    #[serde(default = "default_repeat_type")]
+    repeat_type: String,
+    #[serde(default)]
+    repeat_interval: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -310,6 +318,12 @@ fn save_conversations(
 }
 
 #[tauri::command]
+fn broadcast_chat_message(app: tauri::AppHandle, personality: String, content: String) {
+    use serde_json::json;
+    app.emit("chat-new-message", json!({ "personality": personality, "content": content })).ok();
+}
+
+#[tauri::command]
 fn get_todo_data(app: tauri::AppHandle) -> TodoData {
     load_todo_data(&app)
 }
@@ -555,7 +569,21 @@ fn check_todo_reminders(app: &tauri::AppHandle) {
         let mut data = load_todo_data(app);
         for item in &mut data.items {
             if fired_ids.contains(&item.id) {
-                item.remind_at = None;
+                match item.repeat_type.as_str() {
+                    "daily" => {
+                        if let Some(remind_at) = item.remind_at {
+                            item.remind_at = Some(remind_at + 86400);
+                        }
+                    }
+                    "interval" => {
+                        if let (Some(remind_at), Some(interval)) = (item.remind_at, item.repeat_interval) {
+                            item.remind_at = Some(remind_at + interval);
+                        }
+                    }
+                    _ => {
+                        item.remind_at = None;
+                    }
+                }
             }
         }
         save_todo_data(app, &data);
@@ -585,6 +613,7 @@ pub fn run() {
             open_chat,
             save_memories,
             save_conversations,
+            broadcast_chat_message,
             get_todo_data,
             save_todo_items,
             open_todo,
@@ -801,10 +830,15 @@ pub fn run() {
                                     t.set_tooltip(Some("")).ok();
                                 }
                             }
+                            // 通知主窗口退出提醒状态
+                            if let Some(window) = app.get_webview_window("main") {
+                                window.emit("reminder-dismissed", ()).ok();
+                            }
                             // 打开聊天室
                             if let Some(window) = app.get_webview_window("chat") {
                                 window.show().ok();
                                 window.set_focus().ok();
+                                window.emit("chat-reload", ()).ok();
                             } else {
                                 let _ = WebviewWindowBuilder::new(
                                     app,

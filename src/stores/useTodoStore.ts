@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
-import type { TodoItem } from '../types/todo';
+import type { TodoItem, RepeatType } from '../types/todo';
 
 interface TodoStore {
   items: TodoItem[];
@@ -8,7 +8,7 @@ interface TodoStore {
   addItem: (text: string) => void;
   toggleItem: (id: string) => void;
   deleteItem: (id: string) => void;
-  setReminder: (id: string, remindAt: number) => void;
+  setReminder: (id: string, remindAt: number, repeatType: RepeatType, repeatInterval: number | null) => void;
   clearReminder: (id: string) => void;
 }
 
@@ -31,6 +31,8 @@ export const useTodoStore = create<TodoStore>((set) => ({
         completed: false,
         created_at: Math.floor(Date.now() / 1000),
         remind_at: null,
+        repeat_type: 'once' as RepeatType,
+        repeat_interval: null,
       };
       const items = [newItem, ...state.items];
       persist(items);
@@ -53,10 +55,12 @@ export const useTodoStore = create<TodoStore>((set) => ({
       return { items };
     }),
 
-  setReminder: (id, remindAt) =>
+  setReminder: (id, remindAt, repeatType, repeatInterval) =>
     set((state) => {
       const items = state.items.map((item) =>
-        item.id === id ? { ...item, remind_at: remindAt } : item
+        item.id === id
+          ? { ...item, remind_at: remindAt, repeat_type: repeatType, repeat_interval: repeatInterval }
+          : item
       );
       persist(items);
       return { items };
@@ -65,7 +69,9 @@ export const useTodoStore = create<TodoStore>((set) => ({
   clearReminder: (id) =>
     set((state) => {
       const items = state.items.map((item) =>
-        item.id === id ? { ...item, remind_at: null } : item
+        item.id === id
+          ? { ...item, remind_at: null, repeat_type: 'once' as RepeatType, repeat_interval: null }
+          : item
       );
       persist(items);
       return { items };
