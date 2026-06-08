@@ -9,6 +9,7 @@ interface Config {
   personalities: PersonalityParams[];
   show_text: boolean;
   reminder_enabled: boolean;
+  todo_reminder_enabled: boolean;
   deepseek_api_key?: string;
 }
 
@@ -24,6 +25,7 @@ function PersonalityEditor() {
   const [apiKey, setApiKey] = useState('');
   const [showText, setShowText] = useState(true);
   const [reminderEnabled, setReminderEnabled] = useState(true);
+  const [todoReminderEnabled, setTodoReminderEnabled] = useState(true);
 
   const loadConfig = () => {
     invoke<Config>('get_config')
@@ -32,6 +34,7 @@ function PersonalityEditor() {
         setApiKey(c.deepseek_api_key || '');
         setShowText(c.show_text);
         setReminderEnabled(c.reminder_enabled);
+        setTodoReminderEnabled(c.todo_reminder_enabled);
       })
       .catch((e) => setError(String(e)));
   };
@@ -64,6 +67,12 @@ function PersonalityEditor() {
     const next = !reminderEnabled;
     setReminderEnabled(next);
     invoke('set_reminder_enabled', { enabled: next }).catch((e) => setError(String(e)));
+  };
+
+  const toggleTodoReminder = () => {
+    const next = !todoReminderEnabled;
+    setTodoReminderEnabled(next);
+    invoke('set_todo_reminder_enabled', { enabled: next }).catch((e) => setError(String(e)));
   };
 
   if (!config) return <div className="pe-container"><p>加载中...</p></div>;
@@ -107,12 +116,21 @@ function PersonalityEditor() {
             </button>
           </div>
           <div className="pe-quick-row">
-            <label>定时提醒</label>
+            <label>休息提醒</label>
             <button
               className={`pe-toggle ${reminderEnabled ? 'pe-toggle-on' : ''}`}
               onClick={toggleReminder}
             >
               {reminderEnabled ? '开启' : '关闭'}
+            </button>
+          </div>
+          <div className="pe-quick-row">
+            <label>备忘录提醒</label>
+            <button
+              className={`pe-toggle ${todoReminderEnabled ? 'pe-toggle-on' : ''}`}
+              onClick={toggleTodoReminder}
+            >
+              {todoReminderEnabled ? '开启' : '关闭'}
             </button>
           </div>
         </div>

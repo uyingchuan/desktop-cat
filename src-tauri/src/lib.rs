@@ -83,6 +83,8 @@ struct PersistedConfig {
     show_text: bool,
     #[serde(default = "default_true")]
     reminder_enabled: bool,
+    #[serde(default = "default_true")]
+    todo_reminder_enabled: bool,
     #[serde(default)]
     deepseek_api_key: Option<String>,
 }
@@ -112,6 +114,7 @@ impl Default for PersistedConfig {
             custom_personalities: HashMap::new(),
             show_text: true,
             reminder_enabled: true,
+            todo_reminder_enabled: true,
             deepseek_api_key: None,
         }
     }
@@ -365,10 +368,17 @@ fn set_reminder_enabled(app: tauri::AppHandle, enabled: bool) -> Result<(), Stri
     let mut config = load_config(&app);
     config.reminder_enabled = enabled;
     save_config(&app, &config);
-    rebuild_tray_menu(&app, &config)?;
     if let Some(window) = app.get_webview_window("main") {
         window.emit("reminder-toggled", enabled).ok();
     }
+    Ok(())
+}
+
+#[tauri::command]
+fn set_todo_reminder_enabled(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    let mut config = load_config(&app);
+    config.todo_reminder_enabled = enabled;
+    save_config(&app, &config);
     Ok(())
 }
 
@@ -476,8 +486,13 @@ fn rebuild_tray_menu(app: &tauri::AppHandle, config: &PersistedConfig) -> Result
             .build(app).map_err(|e| e.to_string())?
     };
     let toggle_reminder = {
-        let text = if config.reminder_enabled { "关闭提醒" } else { "开启提醒" };
+        let text = if config.reminder_enabled { "关闭休息提醒" } else { "开启休息提醒" };
         MenuItemBuilder::with_id("toggle_reminder", text)
+            .build(app).map_err(|e| e.to_string())?
+    };
+    let toggle_todo_reminder = {
+        let text = if config.todo_reminder_enabled { "关闭备忘录提醒" } else { "开启备忘录提醒" };
+        MenuItemBuilder::with_id("toggle_todo_reminder", text)
             .build(app).map_err(|e| e.to_string())?
     };
     let restart = MenuItemBuilder::with_id("restart", "重启 应用")
@@ -491,6 +506,7 @@ fn rebuild_tray_menu(app: &tauri::AppHandle, config: &PersistedConfig) -> Result
         .item(&personality_submenu)
         .item(&toggle_text)
         .item(&toggle_reminder)
+        .item(&toggle_todo_reminder)
         .separator()
         .item(&restart)
         .item(&quit)
@@ -577,6 +593,9 @@ fn set_tray_alert(app: tauri::AppHandle, message: String) {
 // --- 待办提醒后台检查 ---
 
 fn check_todo_reminders(app: &tauri::AppHandle) {
+    let config = load_config(app);
+    if !config.todo_reminder_enabled { return; }
+
     use tauri_plugin_notification::NotificationExt;
     let data = load_todo_data(app);
     let now = std::time::SystemTime::now()
@@ -658,6 +677,7 @@ pub fn run() {
             set_active_personality,
             set_show_text,
             set_reminder_enabled,
+            set_todo_reminder_enabled,
             save_memories,
             save_conversations,
             broadcast_chat_message,
@@ -701,8 +721,12 @@ pub fn run() {
                 MenuItemBuilder::with_id("toggle_text", text).build(app)?
             };
             let toggle_reminder = {
-                let text = if config.reminder_enabled { "关闭提醒" } else { "开启提醒" };
+                let text = if config.reminder_enabled { "关闭休息提醒" } else { "开启休息提醒" };
                 MenuItemBuilder::with_id("toggle_reminder", text).build(app)?
+            };
+            let toggle_todo_reminder = {
+                let text = if config.todo_reminder_enabled { "关闭备忘录提醒" } else { "开启备忘录提醒" };
+                MenuItemBuilder::with_id("toggle_todo_reminder", text).build(app)?
             };
             let restart = MenuItemBuilder::with_id("restart", "重启 应用").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
@@ -713,6 +737,7 @@ pub fn run() {
                 .item(&personality_submenu)
                 .item(&toggle_text)
                 .item(&toggle_reminder)
+                .item(&toggle_todo_reminder)
                 .separator()
                 .item(&restart)
                 .item(&quit)
@@ -763,6 +788,12 @@ pub fn run() {
                             if let Some(window) = app.get_webview_window("main") {
                                 window.emit("reminder-toggled", config.reminder_enabled).ok();
                             }
+                        }
+                        "toggle_todo_reminder" => {
+                            let mut config = load_config(app);
+                            config.todo_reminder_enabled = !config.todo_reminder_enabled;
+                            save_config(app, &config);
+                            let _ = rebuild_tray_menu(app, &config);
                         }
                         "open_settings" | "open_chat" | "open_todo" => {
                             let tab = match id.as_str() {
