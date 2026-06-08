@@ -8,6 +8,8 @@ import './PersonalityEditor.css';
 interface Config {
   active_personality: string;
   custom_personalities: Record<string, PersonalityParams>;
+  show_text: boolean;
+  reminder_enabled: boolean;
   deepseek_api_key?: string;
 }
 
@@ -52,10 +54,30 @@ function PersonalityEditor() {
   const [error, setError] = useState('');
   const [showSpeeches, setShowSpeeches] = useState(false);
   const [apiKey, setApiKey] = useState('');
+  const [showText, setShowText] = useState(true);
+  const [reminderEnabled, setReminderEnabled] = useState(true);
 
   const saveApiKey = (key: string) => {
     setApiKey(key);
     invoke('set_api_key', { key }).catch((e) => setError(String(e)));
+  };
+
+  const switchPersonality = (name: string) => {
+    invoke('set_active_personality', { name })
+      .then(() => loadConfig())
+      .catch((e) => setError(String(e)));
+  };
+
+  const toggleShowText = () => {
+    const next = !showText;
+    setShowText(next);
+    invoke('set_show_text', { show: next }).catch((e) => setError(String(e)));
+  };
+
+  const toggleReminder = () => {
+    const next = !reminderEnabled;
+    setReminderEnabled(next);
+    invoke('set_reminder_enabled', { enabled: next }).catch((e) => setError(String(e)));
   };
 
   const loadConfig = () => {
@@ -63,6 +85,8 @@ function PersonalityEditor() {
       .then((c) => {
         setConfig(c);
         setApiKey(c.deepseek_api_key || '');
+        setShowText(c.show_text);
+        setReminderEnabled(c.reminder_enabled);
       })
       .catch((e) => setError(String(e)));
   };
@@ -140,6 +164,48 @@ function PersonalityEditor() {
       </div>
 
       {error && <div className="pe-error">{error}</div>}
+
+      {/* 快捷设置 */}
+      <div className="pe-section">
+        <h3>⚡ 快捷设置</h3>
+        <div className="pe-quick-settings">
+          <div className="pe-quick-row">
+            <label>当前猫格</label>
+            <select
+              className="pe-select"
+              value={activeName}
+              onChange={(e) => switchPersonality(e.target.value)}
+            >
+              {BUILTIN_PERSONALITIES.map((name) => (
+                <option key={name} value={name}>
+                  {name === 'calm' ? '慵懒 (内置)' : '活泼 (内置)'}
+                </option>
+              ))}
+              {Object.keys(customs).map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="pe-quick-row">
+            <label>显示文本</label>
+            <button
+              className={`pe-toggle ${showText ? 'pe-toggle-on' : ''}`}
+              onClick={toggleShowText}
+            >
+              {showText ? '开启' : '关闭'}
+            </button>
+          </div>
+          <div className="pe-quick-row">
+            <label>定时提醒</label>
+            <button
+              className={`pe-toggle ${reminderEnabled ? 'pe-toggle-on' : ''}`}
+              onClick={toggleReminder}
+            >
+              {reminderEnabled ? '开启' : '关闭'}
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div className="pe-section">
         <h3>DeepSeek API Key</h3>

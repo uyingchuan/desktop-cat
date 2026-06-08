@@ -290,6 +290,46 @@ fn set_api_key(app: tauri::AppHandle, key: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn set_active_personality(app: tauri::AppHandle, name: String) -> Result<(), String> {
+    let mut config = load_config(&app);
+    config.active_personality = name.clone();
+    save_config(&app, &config);
+
+    if let Ok(mut p) = app.state::<PersonalityState>().0.lock() {
+        *p = name.clone();
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        window.emit("personality-changed", &name).ok();
+    }
+    rebuild_tray_menu(&app, &config)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn set_show_text(app: tauri::AppHandle, show: bool) -> Result<(), String> {
+    let mut config = load_config(&app);
+    config.show_text = show;
+    save_config(&app, &config);
+    rebuild_tray_menu(&app, &config)?;
+    if let Some(window) = app.get_webview_window("main") {
+        window.emit("text-visibility-changed", show).ok();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn set_reminder_enabled(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    let mut config = load_config(&app);
+    config.reminder_enabled = enabled;
+    save_config(&app, &config);
+    rebuild_tray_menu(&app, &config)?;
+    if let Some(window) = app.get_webview_window("main") {
+        window.emit("reminder-toggled", enabled).ok();
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn get_chat_data(app: tauri::AppHandle) -> ChatData {
     load_chat_data(&app)
 }
@@ -386,12 +426,6 @@ fn rebuild_tray_menu(app: &tauri::AppHandle, config: &PersistedConfig) -> Result
         MenuItemBuilder::with_id("toggle_reminder", text)
             .build(app).map_err(|e| e.to_string())?
     };
-    let manage = MenuItemBuilder::with_id("open_settings", "个性管理...")
-        .build(app).map_err(|e| e.to_string())?;
-    let chat = MenuItemBuilder::with_id("open_chat", "聊天室")
-        .build(app).map_err(|e| e.to_string())?;
-    let todo = MenuItemBuilder::with_id("open_todo", "备忘录")
-        .build(app).map_err(|e| e.to_string())?;
     let restart = MenuItemBuilder::with_id("restart", "重启 应用")
         .build(app).map_err(|e| e.to_string())?;
     let quit = MenuItemBuilder::with_id("quit", "退出")
@@ -403,9 +437,6 @@ fn rebuild_tray_menu(app: &tauri::AppHandle, config: &PersistedConfig) -> Result
         .item(&personality_submenu)
         .item(&toggle_text)
         .item(&toggle_reminder)
-        .item(&manage)
-        .item(&chat)
-        .item(&todo)
         .separator()
         .item(&restart)
         .item(&quit)
@@ -570,6 +601,9 @@ pub fn run() {
             delete_personality,
             open_dashboard,
             set_api_key,
+            set_active_personality,
+            set_show_text,
+            set_reminder_enabled,
             save_memories,
             save_conversations,
             broadcast_chat_message,
@@ -601,7 +635,6 @@ pub fn run() {
 
             let show_hide = MenuItemBuilder::with_id("show_hide", "隐藏 猫咪").build(app)?;
             let show_hide_menu = show_hide.clone();
-            let show_hide_tray = show_hide.clone();
 
             let (personality_submenu, sub_items) = build_personality_submenu(
                 app.handle(),
@@ -609,9 +642,6 @@ pub fn run() {
                 &config.custom_personalities,
             )?;
 
-            let manage = MenuItemBuilder::with_id("open_settings", "个性管理...").build(app)?;
-            let chat = MenuItemBuilder::with_id("open_chat", "聊天室").build(app)?;
-            let todo_menu = MenuItemBuilder::with_id("open_todo", "备忘录").build(app)?;
             let toggle_text = {
                 let text = if config.show_text { "关闭文本" } else { "显示文本" };
                 MenuItemBuilder::with_id("toggle_text", text).build(app)?
@@ -629,9 +659,6 @@ pub fn run() {
                 .item(&personality_submenu)
                 .item(&toggle_text)
                 .item(&toggle_reminder)
-                .item(&manage)
-                .item(&chat)
-                .item(&todo_menu)
                 .separator()
                 .item(&restart)
                 .item(&quit)
@@ -722,7 +749,6 @@ pub fn run() {
                     }
                 })
                 .on_tray_icon_event(move |tray, event| {
-                    let show_hide = show_hide_tray.clone();
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
@@ -752,14 +778,9 @@ pub fn run() {
                             if let Some(window) = app.get_webview_window("dashboard") {
                                 window.emit("chat-reload", ()).ok();
                             }
-                        } else if let Some(window) = app.get_webview_window("main") {
-                            if window.is_visible().unwrap_or(true) {
-                                window.hide().ok();
-                                show_hide.set_text("显示 猫咪").ok();
-                            } else {
-                                window.show().ok();
-                                show_hide.set_text("隐藏 猫咪").ok();
-                            }
+                        } else {
+                            // 正常情况：左键打开 Dashboard
+                            open_dashboard_inner(app, "chat");
                         }
                     }
                 })

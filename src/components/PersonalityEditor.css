@@ -4,6 +4,9 @@
   max-width: 660px;
   margin: 0 auto;
   color: #333;
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .pe-header {
@@ -104,6 +107,58 @@
 .pe-tag-active { background: #4a90d9; color: #fff; }
 .pe-row-actions { display: flex; }
 .pe-row-params { display: flex; gap: 14px; margin-top: 6px; font-size: 13px; color: #888; }
+
+/* Quick Settings */
+.pe-quick-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pe-quick-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.pe-quick-row label {
+  font-size: 14px;
+  color: #333;
+}
+
+.pe-select {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+  cursor: pointer;
+  outline: none;
+  min-width: 140px;
+}
+
+.pe-select:focus {
+  border-color: #4a90d9;
+}
+
+.pe-toggle {
+  padding: 4px 16px;
+  border: 1px solid #ccc;
+  border-radius: 14px;
+  background: #e0e0e0;
+  color: #888;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 56px;
+}
+
+.pe-toggle-on {
+  background: #07c160;
+  color: #fff;
+  border-color: #07c160;
+}
 
 .pe-hint { color: #999; font-size: 13px; text-align: center; padding: 20px 0; }
 
