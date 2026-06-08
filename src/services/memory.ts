@@ -18,6 +18,7 @@ export async function extractMemories(
     content: m.content,
     type: m.memory_type,
     importance: m.importance,
+    trigger_at: m.trigger_at,
   }));
 
   const systemPrompt = `You are a precise memory extraction system for a desktop cat companion app. Your job: maintain a structured list of facts about the user that the cat should remember.
@@ -40,11 +41,18 @@ Examples:
 
 ## "event" — 时间相关事件
 The user mentions something that is tied to a specific time: upcoming plans, things that happened, deadlines.
+If the user explicitly asks to be REMINDED at a specific future time, include trigger_at as a Unix timestamp (seconds).
 Examples:
   用户说"明天有个面试" → {"type":"event","content":"用户明天有面试","importance":9}
   用户说"下周要出差" → {"type":"event","content":"用户下周出差","importance":8}
   用户说"今天加班到很晚" → {"type":"event","content":"用户今天加班","importance":6}
   用户说"刚开完一个长会" → {"type":"event","content":"用户刚开完长会","importance":4}
+  用户说"明天早上8点提醒我开会" (now is 2026-06-08 22:00)
+    → {"type":"event","content":"用户明天早上8点要开会","importance":9,"trigger_at":1749427200}
+  用户说"下午3点提醒我交周报" (now is 2026-06-08 10:00)
+    → {"type":"event","content":"用户今天下午3点要交周报","importance":8,"trigger_at":1749438000}
+  IMPORTANT: only set trigger_at when user EXPLICITLY asks for a reminder ("提醒我"/"remember"/"remind me").
+  Do NOT set trigger_at for plain event mentions without a reminder request.
 
 ## "preference" — 用户喜好/习惯
 The user expresses what they LIKE, DISLIKE, PREFER, or HABITUALLY do. Must have clear sentiment or habitual pattern.
@@ -115,6 +123,7 @@ Examples:
           importance: Math.min(10, Math.max(1, (item.importance as number) || 5)),
           created_at: (item.created_at as number) || now,
           last_referenced_at: now,
+          trigger_at: (item.trigger_at as number) || undefined,
         }));
       }
     }

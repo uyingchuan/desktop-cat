@@ -148,8 +148,11 @@ export function useCompanionEngine() {
         // 广播到所有窗口
         invoke('broadcast_chat_message', { personality: active_personality, content: message }).catch(() => {});
 
-        // 托盘闪烁
-        invoke('set_tray_alert', { message }).catch(() => {});
+        // 托盘闪烁：先清除可能的提醒闪烁，短暂延迟后设置
+        invoke('set_tray_alert', { message: '' }).catch(() => {});
+        setTimeout(() => {
+          invoke('set_tray_alert', { message }).catch(() => {});
+        }, 300);
 
         // 降低孤独感（联系人已建立）
         store.updateInternalState(active_personality, {
@@ -157,6 +160,90 @@ export function useCompanionEngine() {
         });
       } catch (err) {
         console.error('[Companion] Engine error:', err);
+      } finally {
+        processingRef.current = false;
+      }
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  // --- 记忆触发快速通道：跳过反骚扰和决策，直接生成提醒 ---
+  useEffect(() => {
+    interface MemoryTriggerPayload {
+      personality: string;
+      memories: string[];
+    }
+
+    const unlisten = listen<MemoryTriggerPayload>('memory-trigger', async (event) => {
+      if (processingRef.current) return;
+      processingRef.current = true;
+
+      try {
+        const { personality: memoryPersonality, memories } = event.payload;
+        if (!memories || memories.length === 0) return;
+
+        // 加载配置和陪伴数据
+        const [companionData, config] = await Promise.all([
+          invoke<CompanionData>('get_companion_data'),
+          invoke<Config>('get_config'),
+        ]);
+
+        const store = useCompanionStore.getState();
+        store.loadCompanionData(companionData);
+
+        if (!store.contact_policy.companion_enabled) return;
+
+        const apiKey = config.deepseek_api_key;
+        if (!apiKey) return;
+
+        const params = config.personalities.find((p) => p.name === memoryPersonality);
+        const systemPrompt = params?.systemPrompt || '你是一只可爱的桌面猫猫，回复要简短可爱（1-2句话），用"喵"结尾。';
+        const rel = store.relationships[memoryPersonality];
+
+        // 直接生成提醒消息（跳过反骚扰和决策）
+        const message = await generateProactiveMessage(
+          {
+            reason: `用户之前设置的提醒到时间了：${memories.join('；')}`,
+            stage: rel?.stage || 'new',
+            relevantMemories: [],
+            personalityName: memoryPersonality,
+            systemPrompt,
+            familiarity: rel?.familiarity || 0,
+            loneliness: 0,
+          },
+          apiKey,
+        );
+
+        console.log('[MemoryTrigger] Generated:', message);
+
+        // 执行
+        store.recordProactiveContact(memoryPersonality);
+
+        const chatStore = useChatStore.getState();
+        try {
+          const chatData = await invoke<{ conversations: Record<string, { role: string; content: string; timestamp: number }[]> }>('get_chat_data');
+          chatStore.loadConversations(chatData.conversations as Record<string, ChatMessage[]> || {});
+        } catch { /* ok */ }
+        chatStore.addMessage(memoryPersonality, { role: 'assistant', content: message });
+
+        usePetStore.getState().setSpeech(message);
+        invoke('broadcast_chat_message', { personality: memoryPersonality, content: message }).catch(() => {});
+        invoke('set_tray_alert', { message }).catch(() => {});
+
+        // 标记记忆已触发（需用 matched memories 的 id）
+        // memory-trigger 只传了 content，这里通过遍历找到对应记忆
+        const allMems = store.memories_v2;
+        for (const memContent of memories) {
+          const found = allMems.find((m) => m.content === memContent && m.trigger_at !== undefined);
+          if (found) {
+            store.markMemoryTriggered(found.id);
+          }
+        }
+      } catch (err) {
+        console.error('[MemoryTrigger] Error:', err);
       } finally {
         processingRef.current = false;
       }

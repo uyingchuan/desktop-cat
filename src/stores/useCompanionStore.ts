@@ -49,6 +49,7 @@ interface CompanionStore {
   checkContactAllowed: (personality: string) => ContactCheckResult;
 
   // --- 记忆 V2 CRUD ---
+  markMemoryTriggered: (id: string) => void;
   addMemoryV2: (memory: Omit<MemoryItemV2, 'id' | 'created_at' | 'last_referenced_at'>) => void;
   removeMemoryV2: (id: string) => void;
   getPersonalityMemoriesV2: (personality: string, type?: string, limit?: number) => MemoryItemV2[];
@@ -252,6 +253,17 @@ export const useCompanionStore = create<CompanionStore>((set, get) => ({
 
     return { allowed: true };
   },
+
+  // --- 标记记忆已触发（清除 trigger_at）---
+  markMemoryTriggered: (id: string) =>
+    set((state) => {
+      const memories_v2 = state.memories_v2.map((m) =>
+        m.id === id ? { ...m, trigger_at: undefined, last_referenced_at: Math.floor(Date.now() / 1000) } : m,
+      );
+      const newState = { ...state, memories_v2 };
+      persist(gather(newState));
+      return { memories_v2 };
+    }),
 
   // --- 记忆 V2 CRUD ---
   addMemoryV2: (memory: Omit<MemoryItemV2, 'id' | 'created_at' | 'last_referenced_at'>) =>

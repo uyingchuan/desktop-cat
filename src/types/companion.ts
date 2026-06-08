@@ -45,6 +45,7 @@ export interface MemoryItemV2 {
   importance: number;         // 1-10
   created_at: number;         // Unix 时间戳（秒）
   last_referenced_at: number; // 最后引用时间戳（秒）
+  trigger_at?: number;        // 提醒触发时间 Unix 时间戳（秒），undefined = 无提醒
 }
 
 /** 伴侣事件类型 — V1 仅时间 + 缺席 */

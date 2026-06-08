@@ -264,6 +264,8 @@ struct MemoryItemV2 {
     created_at: i64,
     #[serde(default)]
     last_referenced_at: i64,
+    #[serde(default)]
+    trigger_at: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -391,6 +393,7 @@ fn load_companion_data(app: &tauri::AppHandle) -> CompanionData {
                                 importance: 5,
                                 created_at: now,
                                 last_referenced_at: now,
+                                trigger_at: None,
                             });
                         }
                     }
@@ -490,6 +493,77 @@ fn check_companion_events(app: &tauri::AppHandle) {
             "events": events,
             "active_personality": active_personality,
         })).ok();
+    }
+}
+
+// --- 记忆触发高频扫描（每 60 秒检查 trigger_at 到期的记忆）---
+
+fn check_memory_triggers(app: &tauri::AppHandle) {
+    use serde_json::json;
+    let mut companion_data = load_companion_data(app);
+    if !companion_data.contact_policy.companion_enabled {
+        return;
+    }
+
+    let config = load_config(app);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    // 收集 trigger_at <= now 的记忆（按人格分组）
+    let mut triggered: Vec<MemoryItemV2> = Vec::new();
+    for mem in &companion_data.memories_v2 {
+        if let Some(trigger_at) = mem.trigger_at {
+            if trigger_at <= now {
+                triggered.push(mem.clone());
+            }
+        }
+    }
+
+    if triggered.is_empty() {
+        return;
+    }
+
+    // 清除已触发的 trigger_at，避免重复
+    for mem in &triggered {
+        if let Some(existing) = companion_data.memories_v2.iter_mut().find(|m| m.id == mem.id) {
+            existing.trigger_at = None;
+            existing.last_referenced_at = now;
+        }
+    }
+    save_companion_data(app, &companion_data);
+
+    // 按人格分组发送 memory-trigger 事件
+    let active_personality = &config.active_personality;
+    let personality_memories: Vec<&MemoryItemV2> = triggered
+        .iter()
+        .filter(|m| m.personality == *active_personality)
+        .collect();
+    let other_memories: Vec<&MemoryItemV2> = triggered
+        .iter()
+        .filter(|m| m.personality != *active_personality)
+        .collect();
+
+    // 当前活跃人格的触发记忆
+    if !personality_memories.is_empty() {
+        let contents: Vec<&str> = personality_memories.iter().map(|m| m.content.as_str()).collect();
+        if let Some(window) = app.get_webview_window("main") {
+            window.emit("memory-trigger", json!({
+                "personality": active_personality,
+                "memories": contents,
+            })).ok();
+        }
+    }
+
+    // 非活跃人格的触发记忆也发送（Dashboard 可能需要知道）
+    for mem in &other_memories {
+        if let Some(window) = app.get_webview_window("main") {
+            window.emit("memory-trigger", json!({
+                "personality": mem.personality,
+                "memories": [mem.content],
+            })).ok();
+        }
     }
 }
 
@@ -1180,6 +1254,15 @@ pub fn run() {
                 loop {
                     std::thread::sleep(Duration::from_secs(3600));
                     check_companion_events(&companion_handle);
+                }
+            });
+
+            // 记忆触发扫描：每 60 秒扫描 trigger_at 到期的记忆
+            let memory_trigger_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                loop {
+                    std::thread::sleep(Duration::from_secs(60));
+                    check_memory_triggers(&memory_trigger_handle);
                 }
             });
 

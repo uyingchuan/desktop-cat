@@ -217,6 +217,12 @@
   line-height: 1.4;
 }
 
+.cs-memory-trigger {
+  font-size: 11px;
+  color: #ff9500;
+  margin-bottom: 4px;
+}
+
 .cs-memory-meta {
   display: flex;
   gap: 12px;

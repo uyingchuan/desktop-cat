@@ -279,6 +279,11 @@ function CompanionSettings() {
                   <span className="cs-memory-importance">{'★'.repeat(m.importance)}</span>
                 </div>
                 <div className="cs-memory-content">{m.content}</div>
+                {m.trigger_at && (
+                  <div className="cs-memory-trigger">
+                    ⏰ 提醒时间: {new Date(m.trigger_at * 1000).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                )}
                 <div className="cs-memory-meta">
                   <span>{m.personality}</span>
                   <span>创建: {new Date(m.created_at * 1000).toLocaleDateString('zh-CN')}</span>
