@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import type { PetState, PetAnimationState, PetMood, FacingDirection, Personality, PersonalityParams } from '../types/pet';
-import { BUILTIN_PARAMS } from '../types/pet';
 
 interface PetStoreActions {
   setPosition: (x: number, y: number) => void;
@@ -24,7 +23,7 @@ export const usePetStore = create<PetStore>((set) => ({
   mood: 'happy',
   facingDirection: 'left',
   personality: 'calm',
-  personalityParams: BUILTIN_PARAMS.calm,
+  personalityParams: { id: 'calm', activity: 20, sleepiness: 70, grooming: 60, playfulness: 15 },
   speech: null,
   showText: true,
   reminding: false,

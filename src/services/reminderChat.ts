@@ -1,5 +1,4 @@
 import { chatCompletion } from './llm';
-import { BUILTIN_PARAMS } from '../types/pet';
 import type { PersonalityParams } from '../types/pet';
 
 /**
@@ -12,13 +11,12 @@ import type { PersonalityParams } from '../types/pet';
  */
 export async function generateReminderMessage(
   reminderText: string,
-  personality: string,
+  _personality: string,
   params: PersonalityParams,
   apiKey: string,
 ): Promise<string> {
   const systemPrompt =
     params.systemPrompt ||
-    BUILTIN_PARAMS[personality]?.systemPrompt ||
     '你是一只可爱的桌面猫猫，回复要简短可爱（1-2句话），用"喵"结尾。';
 
   const messages = [

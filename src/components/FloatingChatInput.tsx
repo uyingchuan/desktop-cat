@@ -7,7 +7,6 @@ import { chatCompletion } from '../services/llm';
 import { extractMemories, formatMemoriesForPrompt } from '../services/memory';
 import type { PersonalityParams } from '../types/pet';
 import type { ChatMessage } from '../stores/useChatStore';
-import { BUILTIN_PARAMS } from '../types/pet';
 import './FloatingChatInput.css';
 
 interface Config {
@@ -46,9 +45,7 @@ function FloatingChatInput() {
         loadConversations(chatData.conversations || {});
 
         let params: PersonalityParams | undefined;
-        if (config.active_personality in BUILTIN_PARAMS) {
-          params = BUILTIN_PARAMS[config.active_personality];
-        } else if (config.custom_personalities[config.active_personality]) {
+        if (config.custom_personalities[config.active_personality]) {
           params = config.custom_personalities[config.active_personality];
         }
         setSystemPrompt(params?.systemPrompt || '你是一只可爱的桌面猫猫，回复要简短可爱（1-2句话），用"喵"结尾。');

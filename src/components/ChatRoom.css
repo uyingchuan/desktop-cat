@@ -331,3 +331,20 @@
 .chat-clear-btn:hover {
   background: #fde8e8;
 }
+
+.chat-delete-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 0;
+  border: 1px solid #d94a4a;
+  border-radius: 6px;
+  background: #fff;
+  color: #d94a4a;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.chat-delete-btn:hover {
+  background: #d94a4a;
+  color: #fff;
+}

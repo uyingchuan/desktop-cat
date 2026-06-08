@@ -81,9 +81,24 @@ struct PersistedConfig {
 
 impl Default for PersistedConfig {
     fn default() -> Self {
+        let mut customs = HashMap::new();
+        customs.insert("calm".to_string(), PersonalityParams {
+            id: "calm".to_string(),
+            activity: 20, sleepiness: 70, grooming: 60, playfulness: 15,
+            speeches: None,
+            system_prompt: Some("你是一只慵懒安静的桌面猫猫。你喜欢睡觉和舔毛。回复要简短（1-2句话），语气温柔慵懒，带点傲娇，用\"喵\"结尾。你是用户的桌面伙伴，偶尔关心用户。".to_string()),
+            display_name: None,
+        });
+        customs.insert("active".to_string(), PersonalityParams {
+            id: "active".to_string(),
+            activity: 70, sleepiness: 15, grooming: 20, playfulness: 65,
+            speeches: None,
+            system_prompt: Some("你是一只活泼好动的桌面猫猫。你喜欢跑跳、玩耍、抓东西。回复要简短（1-2句话），语气活泼可爱，用\"喵\"结尾。你是用户的桌面伙伴，经常鼓励和逗用户开心。".to_string()),
+            display_name: None,
+        });
         Self {
             active_personality: "calm".to_string(),
-            custom_personalities: HashMap::new(),
+            custom_personalities: customs,
             show_text: true,
             reminder_enabled: true,
             deepseek_api_key: None,
@@ -104,7 +119,14 @@ fn load_config(app: &tauri::AppHandle) -> PersistedConfig {
     let config_path = config_dir.join("config.json");
     if config_path.exists() {
         if let Ok(content) = fs::read_to_string(&config_path) {
-            if let Ok(config) = serde_json::from_str::<PersistedConfig>(&content) {
+            if let Ok(mut config) = serde_json::from_str::<PersistedConfig>(&content) {
+                // 旧数据迁移：确保 calm/active 在 custom_personalities 中
+                let defaults = PersistedConfig::default();
+                for (name, params) in defaults.custom_personalities {
+                    if !config.custom_personalities.contains_key(&name) {
+                        config.custom_personalities.insert(name, params);
+                    }
+                }
                 return config;
             }
         }
@@ -262,21 +284,30 @@ fn save_personality(
 
 #[tauri::command]
 fn delete_personality(app: tauri::AppHandle, name: String) -> Result<(), String> {
-    if name == "calm" || name == "active" {
-        return Err("不能删除内置猫格".into());
-    }
     let mut config = load_config(&app);
+
+    if !config.custom_personalities.contains_key(&name) {
+        return Err("猫格不存在".into());
+    }
+
+    if config.custom_personalities.len() <= 1 {
+        return Err("不能删除最后一只猫猫".into());
+    }
+
     config.custom_personalities.remove(&name);
-    // 如果当前选中的是被删除的猫格，切回 calm
+
+    // 如果删除的是当前选中的猫格，切换到其他
     if config.active_personality == name {
-        config.active_personality = "calm".to_string();
+        let fallback = config.custom_personalities.keys().next().cloned().unwrap_or_default();
+        config.active_personality = fallback.clone();
         if let Ok(mut p) = app.state::<PersonalityState>().0.lock() {
-            *p = "calm".to_string();
+            *p = fallback.clone();
         }
         if let Some(window) = app.get_webview_window("main") {
-            window.emit("personality-changed", "calm").ok();
+            window.emit("personality-changed", &fallback).ok();
         }
     }
+
     save_config(&app, &config);
     rebuild_tray_menu(&app, &config)?;
     Ok(())

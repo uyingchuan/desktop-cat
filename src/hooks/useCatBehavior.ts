@@ -6,8 +6,7 @@ import { usePetStore } from '../stores/usePetStore';
 import { useTodoStore } from '../stores/useTodoStore';
 import { useChatStore } from '../stores/useChatStore';
 import { generateReminderMessage } from '../services/reminderChat';
-import type { PetAnimationState, PetPosition,   PersonalityParams } from '../types/pet';
-import { BUILTIN_PARAMS } from '../types/pet';
+import type { PetAnimationState, PetPosition, PersonalityParams } from '../types/pet';
 
 const SCREEN_PADDING = 50;
 const WALK_SPEED = 80;
@@ -206,18 +205,14 @@ export function useCatBehavior() {
   // 切换人格时同步更新 params
   const applyPersonality = (name: string) => {
     setPersonality(name);
-    if (name in BUILTIN_PARAMS) {
-      setPersonalityParams(BUILTIN_PARAMS[name]);
-    } else {
-      // 自定义人格：从 Rust 配置中获取参数
-      invoke<{ custom_personalities: Record<string, PersonalityParams> }>('get_config')
-        .then((config) => {
-          if (config.custom_personalities[name]) {
-            setPersonalityParams(config.custom_personalities[name]);
-          }
-        })
-        .catch(() => {});
-    }
+    // 从 Rust 配置中获取参数
+    invoke<{ custom_personalities: Record<string, PersonalityParams> }>('get_config')
+      .then((config) => {
+        if (config.custom_personalities[name]) {
+          setPersonalityParams(config.custom_personalities[name]);
+        }
+      })
+      .catch(() => {});
   };
 
   // 监听来自 Rust 托盘菜单的性格切换事件（运行时切换）
@@ -274,9 +269,7 @@ export function useCatBehavior() {
         setShowText(config.show_text);
         setReminderEnabled(config.reminder_enabled);
         apiKeyRef.current = config.deepseek_api_key;
-        if (name in BUILTIN_PARAMS) {
-          setPersonalityParams(BUILTIN_PARAMS[name]);
-        } else if (config.custom_personalities[name]) {
+        if (config.custom_personalities[name]) {
           setPersonalityParams(config.custom_personalities[name]);
         }
       })

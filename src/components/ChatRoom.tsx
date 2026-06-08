@@ -7,7 +7,6 @@ import { chatCompletion } from '../services/llm';
 import { extractMemories, formatMemoriesForPrompt } from '../services/memory';
 import type { PersonalityParams } from '../types/pet';
 import type { ChatMessage } from '../stores/useChatStore';
-import { BUILTIN_PARAMS } from '../types/pet';
 import './ChatRoom.css';
 
 interface Config {
@@ -55,9 +54,6 @@ function speechesToRaw(custom?: Record<string, string[]>): Record<string, string
 }
 
 function getPersonalityParams(personality: string, config: Config | null): PersonalityParams {
-  if (personality in BUILTIN_PARAMS) {
-    return { ...BUILTIN_PARAMS[personality], ...(config?.custom_personalities[personality] || {}) };
-  }
   return config?.custom_personalities[personality] || {
     id: personality, activity: 50, sleepiness: 30, grooming: 30, playfulness: 40,
   };
@@ -66,8 +62,6 @@ function getPersonalityParams(personality: string, config: Config | null): Perso
 function personalityDisplayLabel(name: string, config: Config | null): string {
   const params = getPersonalityParams(name, config);
   if (params.displayName) return params.displayName;
-  if (name === 'calm') return '慵懒';
-  if (name === 'active') return '活泼';
   return name;
 }
 
@@ -167,9 +161,6 @@ function ChatRoom({ personality }: { personality: string }) {
   };
 
   const getSystemPrompt = (name: string): string => {
-    if (name in BUILTIN_PARAMS) {
-      return BUILTIN_PARAMS[name].systemPrompt || DEFAULT_SYSTEM_PROMPT;
-    }
     const custom = config?.custom_personalities[name];
     return custom?.systemPrompt || DEFAULT_SYSTEM_PROMPT;
   };
@@ -339,6 +330,21 @@ function ChatRoom({ personality }: { personality: string }) {
             }}
           >
             清空对话
+          </button>
+
+          <button
+            className="chat-delete-btn"
+            onClick={() => {
+              if (!confirm(`确定要删除这只猫猫吗？${personality === 'calm' ? '将恢复内置默认设置。' : '此操作不可恢复。'}`)) return;
+              invoke('delete_personality', { name: personality })
+                .then(() => {
+                  setView('chat');
+                  loadConfig();
+                })
+                .catch((e) => setSettingsError(String(e)));
+            }}
+          >
+            删除猫猫
           </button>
         </div>
       </div>

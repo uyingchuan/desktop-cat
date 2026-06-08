@@ -4,7 +4,6 @@ import { listen } from '@tauri-apps/api/event';
 import ChatRoom from './ChatRoom';
 import TodoPanel from './TodoPanel';
 import PersonalityEditor from './PersonalityEditor';
-import { BUILTIN_PARAMS, BUILTIN_PERSONALITIES } from '../types/pet';
 import type { PersonalityParams } from '../types/pet';
 import './Dashboard.css';
 
@@ -31,11 +30,9 @@ interface PersonalityInfo {
 }
 
 function getPersonalityInfo(name: string, config: Config | null): PersonalityInfo {
-  const params = name in BUILTIN_PARAMS
-    ? { ...BUILTIN_PARAMS[name], ...(config?.custom_personalities[name] || {}) }
-    : config?.custom_personalities[name];
+  const params = config?.custom_personalities[name];
   const id = params?.id || name;
-  const label = params?.displayName || (name === 'calm' ? '慵懒' : name === 'active' ? '活泼' : name);
+  const label = params?.displayName || name;
   return { name, id, label };
 }
 
@@ -47,16 +44,8 @@ function Dashboard({ initialTab = 'chat' }: DashboardProps) {
   const loadPersonalities = useCallback(() => {
     invoke<Config>('get_config')
       .then((c) => {
-        const names = [...BUILTIN_PERSONALITIES, ...Object.keys(c.custom_personalities || {})];
-        // 去重（custom 可能覆盖内置同名 key）
-        const seen = new Set<string>();
-        const infos: PersonalityInfo[] = [];
-        for (const name of names) {
-          if (!seen.has(name)) {
-            seen.add(name);
-            infos.push(getPersonalityInfo(name, c));
-          }
-        }
+        const infos: PersonalityInfo[] = Object.keys(c.custom_personalities || {})
+          .map((name) => getPersonalityInfo(name, c));
         setPersonalities(infos);
       })
       .catch(() => {});
