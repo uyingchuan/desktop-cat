@@ -8,6 +8,7 @@ import { chatCompletion } from '../services/llm';
 import { extractMemories, formatMemoriesForPrompt } from '../services/memory';
 import type { PersonalityParams } from '../types/pet';
 import type { ChatMessage } from '../stores/useChatStore';
+import { SPEECH_STATES, speechesToRaw } from '../types/pet';
 import './ChatRoom.css';
 
 interface Config {
@@ -22,37 +23,6 @@ interface ChatData {
 }
 
 const DEFAULT_SYSTEM_PROMPT = '你是一只可爱的桌面猫猫，回复要简短可爱（1-2句话），用"喵"结尾。';
-
-const DEFAULT_SPEECHES: Record<string, string[]> = {
-  idle:   ['喵?', '嗯?', '什么声音?'],
-  walking:['走一走~', '溜达溜达', '散个步', '逛逛'],
-  running:['冲鸭!', '跑起来!', '追!'],
-  sleeping:['睡醒了...', '喵~好舒服', '伸个懒腰~'],
-  playing:['嘿!', '跳!', '喵!'],
-  floating:['飞起来~', '飘呀飘', '好轻盈'],
-  licking:['舔舔毛', '要干净', '美美的'],
-  attacking:['嗷呜!', '看爪!', '抓到你了!'],
-};
-
-const SPEECH_STATES = [
-  { key: 'idle', label: '待机' },
-  { key: 'walking', label: '走路' },
-  { key: 'running', label: '跑步' },
-  { key: 'sleeping', label: '睡醒' },
-  { key: 'licking', label: '舔毛' },
-  { key: 'playing', label: '跳跃' },
-  { key: 'floating', label: '漂浮' },
-  { key: 'attacking', label: '攻击' },
-];
-
-function speechesToRaw(custom?: Record<string, string[]>): Record<string, string> {
-  const raw: Record<string, string> = {};
-  for (const { key } of SPEECH_STATES) {
-    const src = custom?.[key] && custom[key].length > 0 ? custom[key] : (DEFAULT_SPEECHES[key] || []);
-    raw[key] = src.join('\n');
-  }
-  return raw;
-}
 
 function getPersonalityParams(personality: string, config: Config | null): PersonalityParams {
   return config?.personalities.find(p => p.name === personality) || {

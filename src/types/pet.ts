@@ -14,22 +14,38 @@ export interface PersonalityParams {
   lastChatTime?: number; // 最后聊天时间戳（秒）
 }
 
-// 内置猫格预设参数
-export const BUILTIN_PARAMS: Record<string, PersonalityParams> = {
-  calm: {
-    id: 'calm', name: 'calm',
-    activity: 20, sleepiness: 70, grooming: 60, playfulness: 15,
-    systemPrompt: '你是一只慵懒安静的桌面猫猫。你喜欢睡觉和舔毛。回复要简短（1-2句话），语气温柔慵懒，带点傲娇，用"喵"结尾。你是用户的桌面伙伴，偶尔关心用户。',
-  },
-  active: {
-    id: 'active', name: 'active',
-    activity: 70, sleepiness: 15, grooming: 20, playfulness: 65,
-    systemPrompt: '你是一只活泼好动的桌面猫猫。你喜欢跑跳、玩耍、抓东西。回复要简短（1-2句话），语气活泼可爱，用"喵"结尾。你是用户的桌面伙伴，经常鼓励和逗用户开心。',
-  },
+// 默认话术
+export const DEFAULT_SPEECHES: Record<string, string[]> = {
+  idle:   ['喵?', '嗯?', '什么声音?'],
+  idle2:  ['喵?', '嗯?', '什么声音?'],
+  walking:['走一走~', '溜达溜达', '散个步', '逛逛'],
+  running:['冲鸭!', '跑起来!', '追!'],
+  sleeping:['睡醒了...', '喵~好舒服', '伸个懒腰~'],
+  playing:['嘿!', '跳!', '喵!'],
+  floating:['飞起来~', '飘呀飘', '好轻盈'],
+  licking:['舔舔毛', '要干净', '美美的'],
+  attacking:['嗷呜!', '看爪!', '抓到你了!'],
 };
 
-// 内置猫格名称列表
-export const BUILTIN_PERSONALITIES = ['calm', 'active'];
+export const SPEECH_STATES = [
+  { key: 'idle', label: '待机' },
+  { key: 'walking', label: '走路' },
+  { key: 'running', label: '跑步' },
+  { key: 'sleeping', label: '睡醒' },
+  { key: 'licking', label: '舔毛' },
+  { key: 'playing', label: '跳跃' },
+  { key: 'floating', label: '漂浮' },
+  { key: 'attacking', label: '攻击' },
+];
+
+export function speechesToRaw(custom?: Record<string, string[]>): Record<string, string> {
+  const raw: Record<string, string> = {};
+  for (const { key } of SPEECH_STATES) {
+    const src = custom?.[key]?.length ? custom[key] : (DEFAULT_SPEECHES[key] || []);
+    raw[key] = src.join('\n');
+  }
+  return raw;
+}
 
 export type PetAnimationState =
   | 'idle' | 'idle2'
@@ -64,10 +80,3 @@ export interface PetState {
   reminderEnabled: boolean;
   chatting: boolean;
 }
-
-export type PetAction =
-  | { type: 'SET_POSITION'; x: number; y: number }
-  | { type: 'SET_ANIMATION_STATE'; state: PetAnimationState }
-  | { type: 'SET_MOOD'; mood: PetMood }
-  | { type: 'SET_FACING_DIRECTION'; direction: FacingDirection }
-  | { type: 'SET_PERSONALITY'; personality: Personality };
