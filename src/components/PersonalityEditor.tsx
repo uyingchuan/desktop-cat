@@ -14,18 +14,25 @@ interface Config {
 }
 
 interface EditingState {
-  name: string;
+  displayName: string;
   params: PersonalityParams;
   isNew: boolean;
   rawSpeeches: Record<string, string>;  // raw textarea text, parsed to params.speeches on save
 }
 
-const defaultParams: PersonalityParams = {
-  activity: 50,
-  sleepiness: 30,
-  grooming: 30,
-  playfulness: 40,
-};
+function generateId(): string {
+  return 'custom_' + Math.random().toString(36).slice(2, 10);
+}
+
+function defaultParams(): PersonalityParams {
+  return {
+    id: generateId(),
+    activity: 50,
+    sleepiness: 30,
+    grooming: 30,
+    playfulness: 40,
+  };
+}
 
 const DEFAULT_SPEECHES: Record<string, string[]> = {
   idle:   ['喵?', '嗯?', '什么声音?'],
@@ -99,12 +106,12 @@ function PersonalityEditor() {
   }, []);
 
   const startNew = () => {
-    setEditing({ name: '', params: { ...defaultParams }, isNew: true, rawSpeeches: speechesToRaw() });
+    setEditing({ displayName: '', params: defaultParams(), isNew: true, rawSpeeches: speechesToRaw() });
     setError('');
   };
 
-  const startEdit = (name: string, params: PersonalityParams) => {
-    setEditing({ name, params: { ...params }, isNew: false, rawSpeeches: speechesToRaw(params.speeches) });
+  const startEdit = (_name: string, params: PersonalityParams) => {
+    setEditing({ displayName: params.displayName || '', params: { ...params }, isNew: false, rawSpeeches: speechesToRaw(params.speeches) });
     setError('');
   };
 
@@ -112,12 +119,10 @@ function PersonalityEditor() {
 
   const savePersonality = () => {
     if (!editing) return;
-    if (!editing.name.trim()) {
-      setError('请输入猫格名称');
-      return;
-    }
-    if (BUILTIN_PERSONALITIES.includes(editing.name.trim())) {
-      setError('不能使用内置猫格名称');
+    // 用 displayName 或随机 id 作为内部名称
+    const internalName = editing.displayName.trim() || editing.params.id;
+    if (editing.isNew && BUILTIN_PERSONALITIES.includes(internalName)) {
+      setError('名称与内置猫格冲突');
       return;
     }
     // 将 rawSpeeches 解析为 string[] 存入 params.speeches
@@ -126,8 +131,8 @@ function PersonalityEditor() {
       const lines = v.split('\n').filter((l) => l.trim());
       if (lines.length > 0) speeches[k] = lines;
     }
-    const params = { ...editing.params, speeches: Object.keys(speeches).length > 0 ? speeches : undefined };
-    invoke('save_personality', { name: editing.name.trim(), params })
+    const params = { ...editing.params, displayName: editing.displayName.trim() || undefined, speeches: Object.keys(speeches).length > 0 ? speeches : undefined };
+    invoke('save_personality', { name: internalName, params })
       .then(() => {
         setEditing(null);
         loadConfig();
@@ -222,19 +227,17 @@ function PersonalityEditor() {
       {/* 编辑面板 */}
       {editing && (
         <div className="pe-editor">
-          <h3>{editing.isNew ? '新建猫格' : `编辑: ${editing.name}`}</h3>
-          {editing.isNew && (
-            <div className="pe-field">
-              <label>名称</label>
-              <input
-                type="text"
-                value={editing.name}
-                onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                placeholder="输入猫格名称..."
-                maxLength={20}
-              />
-            </div>
-          )}
+          <h3>{editing.isNew ? '新建猫格' : `编辑: ${editing.displayName || '(未命名)'}`}</h3>
+          <div className="pe-field">
+            <label>猫猫名称</label>
+            <input
+              type="text"
+              value={editing.displayName}
+              onChange={(e) => setEditing({ ...editing, displayName: e.target.value })}
+              placeholder="给猫猫取个名字（可选）..."
+              maxLength={20}
+            />
+          </div>
           <SliderRow label="活动度" emoji="🏃" value={editing.params.activity} onChange={(v) => setParam('activity', v)} hint="决定猫猫走/跑的频率" />
           <SliderRow label="睡眠欲" emoji="😴" value={editing.params.sleepiness} onChange={(v) => setParam('sleepiness', v)} hint="决定猫猫睡觉的频率" />
           <SliderRow label="舔毛欲" emoji="🧹" value={editing.params.grooming} onChange={(v) => setParam('grooming', v)} hint="决定猫猫舔毛的频率" />

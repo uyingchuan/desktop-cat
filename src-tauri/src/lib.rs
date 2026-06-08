@@ -51,6 +51,8 @@ impl Default for TodoData {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct PersonalityParams {
+    #[serde(default)]
+    id: String,
     activity: u8,
     sleepiness: u8,
     grooming: u8,
@@ -59,6 +61,8 @@ struct PersonalityParams {
     speeches: Option<HashMap<String, Vec<String>>>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "systemPrompt")]
     system_prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "displayName")]
+    display_name: Option<String>,
 }
 
 fn default_true() -> bool { true }
@@ -242,9 +246,6 @@ fn save_personality(
     name: String,
     params: PersonalityParams,
 ) -> Result<(), String> {
-    if name == "calm" || name == "active" {
-        return Err("不能覆盖内置猫格".into());
-    }
     let mut config = load_config(&app);
     let is_active = config.active_personality == name;
     config.custom_personalities.insert(name.clone(), params);
@@ -391,7 +392,7 @@ fn open_dashboard_inner(app: &tauri::AppHandle, tab: &str) {
             "dashboard",
             WebviewUrl::App(url.into()),
         )
-        .title("桌面猫")
+        .title("小橘窝")
         .inner_size(700.0, 520.0)
         .resizable(true)
         .decorations(true)

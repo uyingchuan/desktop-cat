@@ -4,7 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import ChatRoom from './ChatRoom';
 import TodoPanel from './TodoPanel';
 import PersonalityEditor from './PersonalityEditor';
-import { BUILTIN_PERSONALITIES } from '../types/pet';
+import { BUILTIN_PARAMS, BUILTIN_PERSONALITIES } from '../types/pet';
 import type { PersonalityParams } from '../types/pet';
 import './Dashboard.css';
 
@@ -24,22 +24,40 @@ interface TabDef {
   component: React.ReactNode;
 }
 
-function personalityLabel(name: string): string {
-  if (name === 'calm') return '慵懒';
-  if (name === 'active') return '活泼';
-  return name;
+interface PersonalityInfo {
+  name: string;
+  id: string;
+  label: string;
+}
+
+function getPersonalityInfo(name: string, config: Config | null): PersonalityInfo {
+  const params = name in BUILTIN_PARAMS
+    ? { ...BUILTIN_PARAMS[name], ...(config?.custom_personalities[name] || {}) }
+    : config?.custom_personalities[name];
+  const id = params?.id || name;
+  const label = params?.displayName || (name === 'calm' ? '慵懒' : name === 'active' ? '活泼' : name);
+  return { name, id, label };
 }
 
 function Dashboard({ initialTab = 'chat' }: DashboardProps) {
   const [activeTab, setActiveTab] = useState(initialTab);
-  const [personalities, setPersonalities] = useState<string[]>([...BUILTIN_PERSONALITIES]);
+  const [personalities, setPersonalities] = useState<PersonalityInfo[]>([]);
 
   // 加载猫格列表
   const loadPersonalities = useCallback(() => {
     invoke<Config>('get_config')
       .then((c) => {
-        const all = [...BUILTIN_PERSONALITIES, ...Object.keys(c.custom_personalities || {})];
-        setPersonalities(all);
+        const names = [...BUILTIN_PERSONALITIES, ...Object.keys(c.custom_personalities || {})];
+        // 去重（custom 可能覆盖内置同名 key）
+        const seen = new Set<string>();
+        const infos: PersonalityInfo[] = [];
+        for (const name of names) {
+          if (!seen.has(name)) {
+            seen.add(name);
+            infos.push(getPersonalityInfo(name, c));
+          }
+        }
+        setPersonalities(infos);
       })
       .catch(() => {});
   }, []);
@@ -57,8 +75,7 @@ function Dashboard({ initialTab = 'chat' }: DashboardProps) {
     const unlisten = listen<string>('navigate-tab', (event) => {
       const tab = event.payload;
       if (tab === 'chat') {
-        // 默认导航到第一个聊天 tab
-        setActiveTab(`chat_${personalities[0] || 'calm'}`);
+        setActiveTab(`chat_${personalities[0]?.id || 'calm'}`);
       } else {
         setActiveTab(tab);
       }
@@ -69,7 +86,7 @@ function Dashboard({ initialTab = 'chat' }: DashboardProps) {
   // 监听 chat-reload 事件（托盘闪烁点击后触发）
   useEffect(() => {
     const unlisten = listen('chat-reload', () => {
-      setActiveTab(`chat_${personalities[0] || 'calm'}`);
+      setActiveTab(`chat_${personalities[0]?.id || 'calm'}`);
     });
     return () => { unlisten.then((fn) => fn()); };
   }, [personalities]);
@@ -77,16 +94,16 @@ function Dashboard({ initialTab = 'chat' }: DashboardProps) {
   // 确保 initialTab 在 personalities 加载后正确设置
   useEffect(() => {
     if (initialTab === 'chat' && personalities.length > 0) {
-      setActiveTab(`chat_${personalities[0]}`);
+      setActiveTab(`chat_${personalities[0].id}`);
     }
   }, [initialTab, personalities]);
 
   // 聊天 tab（动态）
-  const chatTabs: TabDef[] = personalities.map((name) => ({
-    id: `chat_${name}`,
+  const chatTabs: TabDef[] = personalities.map((p) => ({
+    id: `chat_${p.id}`,
     icon: '💬',
-    label: personalityLabel(name),
-    component: <ChatRoom personality={name} />,
+    label: p.label,
+    component: <ChatRoom personality={p.name} />,
   }));
 
   // 功能 tab（固定在底部）

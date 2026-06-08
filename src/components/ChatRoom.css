@@ -140,3 +140,194 @@
   background: #ccc;
   cursor: not-allowed;
 }
+
+/* 菜单按钮 */
+.chat-menu-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #999;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chat-menu-btn:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+/* 设置面板 header */
+.chat-settings-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.chat-back-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #333;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-back-btn:hover {
+  background: #f0f0f0;
+}
+
+.chat-save-btn {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 4px;
+  background: #07c160;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.chat-save-btn:hover {
+  background: #06ad56;
+}
+
+.chat-save-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.chat-settings-title {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+  text-align: center;
+}
+
+/* 设置面板内容 */
+.chat-settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.chat-settings-field {
+  margin-bottom: 14px;
+}
+
+.chat-settings-field label {
+  display: block;
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 4px;
+}
+
+.chat-settings-val {
+  font-weight: 600;
+  color: #07c160;
+  margin-left: 4px;
+}
+
+.chat-settings-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.chat-settings-input:focus {
+  border-color: #07c160;
+}
+
+.chat-settings-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+
+.chat-settings-section-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.chat-settings-hint {
+  font-size: 11px;
+  color: #aaa;
+  margin-top: 2px;
+  margin-bottom: 8px;
+}
+
+.chat-settings-readonly {
+  padding: 8px 10px;
+  background: #f0f0f0;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #888;
+}
+
+.chat-settings-field input[type='range'] {
+  width: 100%;
+  margin-top: 2px;
+  accent-color: #07c160;
+}
+
+.chat-settings-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.chat-settings-textarea:focus {
+  border-color: #07c160;
+}
+
+.chat-settings-error {
+  background: #fde8e8;
+  color: #c44;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+/* 清空对话（设置页滚动区内末尾） */
+.chat-clear-btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 10px 0;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #fff;
+  color: #d94a4a;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.chat-clear-btn:hover {
+  background: #fde8e8;
+}
