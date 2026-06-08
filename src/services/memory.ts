@@ -1,24 +1,81 @@
+import type { MemoryItemV2 } from '../types/companion';
+
 const DEEPSEEK_BASE = 'https://api.deepseek.com';
 
+/**
+ * 从对话中提取结构化记忆 V2
+ * 完全替换旧版 extractMemories
+ */
 export async function extractMemories(
   userMessage: string,
   assistantReply: string,
-  existingMemories: string[],
+  existingMemories: MemoryItemV2[],
+  personality: string,
   apiKey: string,
-): Promise<string[]> {
-  const existingJson = JSON.stringify(existingMemories);
+): Promise<MemoryItemV2[]> {
+  const existingList = existingMemories.map((m) => ({
+    id: m.id,
+    content: m.content,
+    type: m.memory_type,
+    importance: m.importance,
+  }));
 
-  const systemPrompt = `You are a precise memory extraction system. Your only job: maintain a list of facts about the user.
+  const systemPrompt = `You are a precise memory extraction system for a desktop cat companion app. Your job: maintain a structured list of facts about the user that the cat should remember.
 
-Given the EXISTING memories (JSON array) and the latest conversation exchange, output a COMPLETE updated JSON array of facts. Rules:
+Given the EXISTING memories (JSON array) and the latest conversation exchange, output a COMPLETE updated JSON array. Each memory object:
+- id: keep existing ID if the fact is unchanged
+- content: short fact, under 30 Chinese characters (or under 30 words for English)
+- type: one of "fact" | "event" | "preference" | "relationship"
+- importance: 1-10 (10 = very important to remember)
+
+=== TYPE CLASSIFICATION GUIDE ===
+
+## "fact" — 中性事实
+The user states something about themselves that is objectively true, with NO time urgency and NO like/dislike sentiment.
+Examples:
+  用户说"我是程序员" → {"type":"fact","content":"用户是程序员","importance":7}
+  用户说"我养了一只狗" → {"type":"fact","content":"用户养了一只狗","importance":6}
+  用户说"我在北京工作" → {"type":"fact","content":"用户在北京工作","importance":7}
+  用户说"今天天气不错" → Do NOT store (trivial, not about the user)
+
+## "event" — 时间相关事件
+The user mentions something that is tied to a specific time: upcoming plans, things that happened, deadlines.
+Examples:
+  用户说"明天有个面试" → {"type":"event","content":"用户明天有面试","importance":9}
+  用户说"下周要出差" → {"type":"event","content":"用户下周出差","importance":8}
+  用户说"今天加班到很晚" → {"type":"event","content":"用户今天加班","importance":6}
+  用户说"刚开完一个长会" → {"type":"event","content":"用户刚开完长会","importance":4}
+
+## "preference" — 用户喜好/习惯
+The user expresses what they LIKE, DISLIKE, PREFER, or HABITUALLY do. Must have clear sentiment or habitual pattern.
+Examples:
+  用户说"我喜欢晚上工作" → {"type":"preference","content":"用户喜欢晚上工作","importance":7}
+  用户说"不太喜欢长篇大论" → {"type":"preference","content":"用户不喜欢长篇回复","importance":8}
+  用户说"我一般早上喝咖啡" → {"type":"preference","content":"用户习惯早上喝咖啡","importance":6}
+  用户说"我觉得猫很可爱" → {"type":"preference","content":"用户喜欢猫","importance":5}
+
+## "relationship" — 用户与猫的互动方式
+The user directly or indirectly expresses how they want the cat to interact with them.
+Examples:
+  用户说"你不用老是回复我" → {"type":"relationship","content":"用户不希望太频繁的互动","importance":8}
+  用户说"多说点话吧" → {"type":"relationship","content":"用户希望猫更主动说话","importance":7}
+  用户说"安静陪着我就好" → {"type":"relationship","content":"用户喜欢安静陪伴","importance":8}
+  用户说"别老问我问题" → {"type":"relationship","content":"用户不喜欢被连续提问","importance":8}
+
+=== IMPORTANCE SCORING GUIDE ===
+9-10: 关键信息，必须记住（重要事件如面试、用户明确表达的互动偏好）
+7-8: 重要信息（职业、地点、强烈偏好）
+5-6: 一般信息（日常习惯、一般喜好）
+3-4: 次要信息（临时状态、一次性事件）
+1-2: 不应存储（琐碎信息）
+
+=== RULES ===
 - Add new facts discovered in this exchange
-- Merge/update facts that contradict older ones
+- Merge/update facts that contradict older ones (keep the SAME id, update content)
 - Remove facts that the user explicitly denies
-- Keep each fact short (under 30 words)
-- Maximum 50 facts total
-- Output ONLY the JSON array, nothing else. No markdown, no explanation.
-
-Example output: ["User's name is Bob","User likes coffee","User works as a designer"]`;
+- Do NOT store trivial small talk (greetings, weather comments, "嗯", "好的")
+- Maximum 50 facts total. If over limit, drop the least important ones.
+- Output ONLY the JSON array, nothing else. No markdown, no explanation.`;
 
   try {
     const res = await fetch(`${DEEPSEEK_BASE}/v1/chat/completions`, {
@@ -32,7 +89,10 @@ Example output: ["User's name is Bob","User likes coffee","User works as a desig
         temperature: 0.1,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Existing memories:\n${existingJson}\n\nLatest exchange:\nUser: ${userMessage}\nAssistant: ${assistantReply}\n\nOutput the complete updated memory array:` },
+          {
+            role: 'user',
+            content: `Existing memories:\n${JSON.stringify(existingList)}\n\nLatest exchange:\nUser: ${userMessage}\nAssistant: ${assistantReply}\n\nOutput the complete updated memory array:`,
+          },
         ],
       }),
     });
@@ -46,7 +106,16 @@ Example output: ["User's name is Bob","User likes coffee","User works as a desig
     if (match) {
       const parsed = JSON.parse(match[0]);
       if (Array.isArray(parsed)) {
-        return parsed.slice(0, 50);
+        const now = Math.floor(Date.now() / 1000);
+        return parsed.slice(0, 50).map((item: Record<string, unknown>) => ({
+          id: (item.id as string) || crypto.randomUUID(),
+          personality,
+          content: item.content as string || '',
+          memory_type: (item.type as MemoryItemV2['memory_type']) || 'fact',
+          importance: Math.min(10, Math.max(1, (item.importance as number) || 5)),
+          created_at: (item.created_at as number) || now,
+          last_referenced_at: now,
+        }));
       }
     }
 
@@ -56,8 +125,54 @@ Example output: ["User's name is Bob","User likes coffee","User works as a desig
   }
 }
 
-export function formatMemoriesForPrompt(memories: string[]): string {
+/**
+ * 搜索相关记忆（按记忆类型过滤 + 重要性排序）
+ */
+export function searchMemories(
+  memories: MemoryItemV2[],
+  personality: string,
+  options?: { type?: string; limit?: number; minImportance?: number },
+): MemoryItemV2[] {
+  let results = memories.filter((m) => m.personality === personality);
+
+  if (options?.type) {
+    results = results.filter((m) => m.memory_type === options.type);
+  }
+  if (options?.minImportance) {
+    results = results.filter((m) => m.importance >= options.minImportance!);
+  }
+
+  // 按重要性降序，然后按最近引用时间降序
+  results.sort((a, b) => {
+    const impDiff = b.importance - a.importance;
+    if (impDiff !== 0) return impDiff;
+    return b.last_referenced_at - a.last_referenced_at;
+  });
+
+  if (options?.limit && options.limit > 0) {
+    results = results.slice(0, options.limit);
+  }
+
+  return results;
+}
+
+/**
+ * 将记忆格式化为 LLM 上下文
+ */
+export function formatMemoriesForPrompt(memories: MemoryItemV2[]): string {
   if (!memories || memories.length === 0) return '';
-  const lines = memories.map((m) => `- ${m}`).join('\n');
+
+  const typeEmoji: Record<string, string> = {
+    fact: '📋',
+    event: '📅',
+    preference: '💜',
+    relationship: '🤝',
+  };
+
+  const lines = memories.map((m) => {
+    const emoji = typeEmoji[m.memory_type] || '📋';
+    return `- ${emoji} [${m.memory_type}] ${m.content}`;
+  }).join('\n');
+
   return `\n\n=== Things you remember about the user ===\n${lines}`;
 }

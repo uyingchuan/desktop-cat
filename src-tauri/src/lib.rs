@@ -140,6 +140,155 @@ fn save_config(app: &tauri::AppHandle, config: &PersistedConfig) {
     }
 }
 
+// --- 陪伴系统数据结构 ---
+
+fn default_familiarity() -> u8 { 0 }
+fn default_trust() -> u8 { 50 }
+fn default_interaction_days() -> u32 { 0 }
+fn default_ignored_count() -> u32 { 0 }
+fn default_stage() -> String { "new".to_string() }
+fn default_energy() -> u8 { 80 }
+fn default_curiosity() -> u8 { 50 }
+fn default_loneliness() -> u8 { 0 }
+fn default_internal_sleepiness() -> u8 { 0 }
+fn default_memory_type() -> String { "fact".to_string() }
+fn default_importance() -> u8 { 5 }
+fn default_true_for_companion() -> bool { true }
+fn default_max_proactive() -> u8 { 2 }
+fn default_min_interval() -> u8 { 8 }
+fn default_ignore_cooldown() -> u8 { 72 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct RelationshipData {
+    #[serde(default = "default_familiarity")]
+    familiarity: u8,
+    #[serde(default = "default_trust")]
+    trust: u8,
+    #[serde(default = "default_interaction_days")]
+    interaction_days: u32,
+    #[serde(default = "default_ignored_count")]
+    ignored_count: u32,
+    #[serde(default)]
+    last_contact_at: i64,
+    #[serde(default)]
+    last_proactive_times: Vec<i64>,
+    #[serde(default)]
+    consecutive_ignores: u32,
+    #[serde(default)]
+    daily_interaction_count: u8,
+    #[serde(default)]
+    daily_interaction_date: String,
+    #[serde(default = "default_stage")]
+    stage: String,
+}
+
+impl Default for RelationshipData {
+    fn default() -> Self {
+        Self {
+            familiarity: 0,
+            trust: 50,
+            interaction_days: 0,
+            ignored_count: 0,
+            last_contact_at: 0,
+            last_proactive_times: Vec::new(),
+            consecutive_ignores: 0,
+            daily_interaction_count: 0,
+            daily_interaction_date: String::new(),
+            stage: "new".to_string(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct InternalCatState {
+    #[serde(default = "default_energy")]
+    energy: u8,
+    #[serde(default = "default_curiosity")]
+    curiosity: u8,
+    #[serde(default = "default_loneliness")]
+    loneliness: u8,
+    #[serde(default = "default_internal_sleepiness")]
+    sleepiness: u8,
+    #[serde(default)]
+    last_decay_at: i64,
+}
+
+impl Default for InternalCatState {
+    fn default() -> Self {
+        Self {
+            energy: 80,
+            curiosity: 50,
+            loneliness: 0,
+            sleepiness: 0,
+            last_decay_at: 0,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct ContactPolicy {
+    #[serde(default = "default_true_for_companion")]
+    companion_enabled: bool,
+    #[serde(default = "default_max_proactive")]
+    max_proactive_per_day: u8,
+    #[serde(default = "default_min_interval")]
+    min_interval_hours: u8,
+    #[serde(default = "default_ignore_cooldown")]
+    ignore_cooldown_hours: u8,
+}
+
+impl Default for ContactPolicy {
+    fn default() -> Self {
+        Self {
+            companion_enabled: true,
+            max_proactive_per_day: 2,
+            min_interval_hours: 8,
+            ignore_cooldown_hours: 72,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct MemoryItemV2 {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    personality: String,
+    #[serde(default)]
+    content: String,
+    #[serde(default = "default_memory_type", rename = "memory_type")]
+    memory_type: String,
+    #[serde(default = "default_importance")]
+    importance: u8,
+    #[serde(default)]
+    created_at: i64,
+    #[serde(default)]
+    last_referenced_at: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct CompanionData {
+    #[serde(default)]
+    relationships: HashMap<String, RelationshipData>,
+    #[serde(default)]
+    internal_states: HashMap<String, InternalCatState>,
+    #[serde(default)]
+    contact_policy: ContactPolicy,
+    #[serde(default)]
+    memories_v2: Vec<MemoryItemV2>,
+}
+
+impl Default for CompanionData {
+    fn default() -> Self {
+        Self {
+            relationships: HashMap::new(),
+            internal_states: HashMap::new(),
+            contact_policy: ContactPolicy::default(),
+            memories_v2: Vec::new(),
+        }
+    }
+}
+
 // --- 聊天数据持久化（独立文件）---
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -202,6 +351,145 @@ fn save_todo_data(app: &tauri::AppHandle, data: &TodoData) {
         if let Ok(content) = serde_json::to_string_pretty(data) {
             fs::write(path, content).ok();
         }
+    }
+}
+
+// --- 陪伴数据持久化（独立文件 companion_data.json）---
+
+fn load_companion_data(app: &tauri::AppHandle) -> CompanionData {
+    let config_dir = app.path().app_data_dir().unwrap_or_default();
+    let path = config_dir.join("companion_data.json");
+
+    let mut companion_data = if path.exists() {
+        fs::read_to_string(&path)
+            .ok()
+            .and_then(|content| serde_json::from_str::<CompanionData>(&content).ok())
+            .unwrap_or_default()
+    } else {
+        CompanionData::default()
+    };
+
+    // 记忆 V2 迁移：如果 memories_v2 为空，从旧 chat_data.json 迁移
+    if companion_data.memories_v2.is_empty() {
+        let chat_data_path = config_dir.join("chat_data.json");
+        if chat_data_path.exists() {
+            if let Ok(content) = fs::read_to_string(&chat_data_path) {
+                if let Ok(mut chat_data) = serde_json::from_str::<ChatData>(&content) {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs() as i64;
+                    let mut migrated: Vec<MemoryItemV2> = Vec::new();
+
+                    for (personality, memories) in chat_data.memories.iter() {
+                        for (i, mem) in memories.iter().enumerate() {
+                            migrated.push(MemoryItemV2 {
+                                id: format!("migrated_{}_{}", now, i),
+                                personality: personality.clone(),
+                                content: mem.clone(),
+                                memory_type: "fact".to_string(),
+                                importance: 5,
+                                created_at: now,
+                                last_referenced_at: now,
+                            });
+                        }
+                    }
+
+                    if !migrated.is_empty() {
+                        companion_data.memories_v2 = migrated;
+                        // 清除旧记忆字段，完成交接
+                        chat_data.memories.clear();
+                        let _ = serde_json::to_string_pretty(&chat_data)
+                            .map(|s| fs::write(&chat_data_path, s));
+                    }
+                }
+            }
+        }
+    }
+
+    companion_data
+}
+
+fn save_companion_data(app: &tauri::AppHandle, data: &CompanionData) {
+    if let Ok(config_dir) = app.path().app_data_dir() {
+        fs::create_dir_all(&config_dir).ok();
+        let path = config_dir.join("companion_data.json");
+        if let Ok(content) = serde_json::to_string_pretty(data) {
+            fs::write(path, content).ok();
+        }
+    }
+}
+
+// --- 陪伴事件调度器（后台线程，每 60 分钟触发）---
+
+fn check_companion_events(app: &tauri::AppHandle) {
+    let companion_data = load_companion_data(app);
+    if !companion_data.contact_policy.companion_enabled {
+        return;
+    }
+
+    let config = load_config(app);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    // 1. 检测时间事件
+    let local_hour = {
+        // 简单用 UTC + 8 (CST) 近似
+        let total_secs = now % 86400;
+        let cst_offset = 8 * 3600;
+        ((total_secs + cst_offset as i64) % 86400) / 3600
+    };
+
+    let mut events: Vec<String> = Vec::new();
+    match local_hour {
+        6..=11 => events.push("Morning".to_string()),
+        12..=17 => events.push("Afternoon".to_string()),
+        _ => events.push("Night".to_string()),
+    };
+
+    // 2. 检测用户缺席事件
+    let active_personality = &config.active_personality;
+    if let Some(rel) = companion_data.relationships.get(active_personality) {
+        let days_absent = if rel.last_contact_at > 0 {
+            (now - rel.last_contact_at) / 86400
+        } else {
+            0
+        };
+        if days_absent >= 7 {
+            events.push("UserAbsent7Days".to_string());
+        } else if days_absent >= 3 {
+            events.push("UserAbsent3Days".to_string());
+        }
+    }
+
+    // 3. 每小时衰减内部状态
+    let mut companion_data = companion_data;
+    for (_name, state) in companion_data.internal_states.iter_mut() {
+        if state.last_decay_at > 0 && (now - state.last_decay_at) >= 3600 {
+            let hours = ((now - state.last_decay_at) / 3600).min(24) as u8; // 最多追算 24 小时衰减
+            for _ in 0..hours {
+                state.energy = state.energy.saturating_sub(5);
+                state.curiosity = state.curiosity.saturating_sub(5);
+                state.loneliness = (state.loneliness + 3).min(100);
+                state.sleepiness = (state.sleepiness + 5).min(100);
+            }
+            state.last_decay_at = now;
+        } else if state.last_decay_at == 0 {
+            state.last_decay_at = now;
+        }
+    }
+
+    save_companion_data(app, &companion_data);
+
+    // 4. 发送 companion-event 到主窗口
+    use serde_json::json;
+    if let Some(window) = app.get_webview_window("main") {
+        window.emit("companion-event", json!({
+            "events": events,
+            "active_personality": active_personality,
+        })).ok();
     }
 }
 
@@ -565,6 +853,27 @@ fn set_tray_alert(app: tauri::AppHandle, message: String) {
     }
 }
 
+// --- 陪伴系统命令 ---
+
+#[tauri::command]
+fn get_companion_data(app: tauri::AppHandle) -> CompanionData {
+    load_companion_data(&app)
+}
+
+#[tauri::command]
+fn save_companion_data_cmd(app: tauri::AppHandle, data: CompanionData) -> Result<(), String> {
+    save_companion_data(&app, &data);
+    Ok(())
+}
+
+#[tauri::command]
+fn reset_relationship(app: tauri::AppHandle, personality: String) -> Result<(), String> {
+    let mut data = load_companion_data(&app);
+    data.relationships.insert(personality, RelationshipData::default());
+    save_companion_data(&app, &data);
+    Ok(())
+}
+
 // --- 待办提醒后台检查 ---
 
 fn check_todo_reminders(app: &tauri::AppHandle) {
@@ -659,6 +968,9 @@ pub fn run() {
             get_todo_data,
             save_todo_items,
             set_tray_alert,
+            get_companion_data,
+            save_companion_data_cmd,
+            reset_relationship,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -858,6 +1170,16 @@ pub fn run() {
                 loop {
                     std::thread::sleep(Duration::from_secs(30));
                     check_todo_reminders(&app_handle);
+                }
+            });
+
+            // 陪伴调度器：启动时立即运行一次，然后每 60 分钟
+            let companion_handle = app.handle().clone();
+            check_companion_events(&companion_handle);
+            std::thread::spawn(move || {
+                loop {
+                    std::thread::sleep(Duration::from_secs(3600));
+                    check_companion_events(&companion_handle);
                 }
             });
 

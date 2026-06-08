@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useCatBehavior } from '../hooks/useCatBehavior';
+import { useCompanionEngine } from '../hooks/useCompanionEngine';
 import { usePetStore } from '../stores/usePetStore';
 import CatSprite from './CatSprite';
 import SpeechBubble from './SpeechBubble';
@@ -8,6 +9,7 @@ import FloatingChatInput from './FloatingChatInput';
 
 function Cat() {
   useCatBehavior();
+  useCompanionEngine();
 
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

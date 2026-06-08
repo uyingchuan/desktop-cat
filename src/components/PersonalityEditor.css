@@ -4,8 +4,7 @@
   max-width: 660px;
   margin: 0 auto;
   color: #333;
-  height: 100%;
-  overflow-y: auto;
+  min-height: 100%;
   box-sizing: border-box;
 }
 

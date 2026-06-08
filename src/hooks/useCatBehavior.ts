@@ -5,9 +5,11 @@ import { invoke } from '@tauri-apps/api/core';
 import { usePetStore } from '../stores/usePetStore';
 import { useTodoStore } from '../stores/useTodoStore';
 import { useChatStore } from '../stores/useChatStore';
+import { useCompanionStore } from '../stores/useCompanionStore';
 import { generateReminderMessage } from '../services/reminderChat';
 import type { PetAnimationState, PetPosition, PersonalityParams } from '../types/pet';
 import { DEFAULT_SPEECHES } from '../types/pet';
+import type { InternalCatState } from '../types/companion';
 
 const SCREEN_PADDING = 50;
 const WALK_SPEED = 80;
@@ -47,14 +49,18 @@ interface Transition {
 
 type TransitionTable = Record<PetAnimationState, Transition[]>;
 
-/** 将 4 个高级人格参数映射为完整的转移表 */
-function paramsToTransitionTable(p: PersonalityParams): TransitionTable {
-  // idle/idle2 的转移权重直接由参数值决定
-  const walk = Math.round(p.activity * 0.5);
-  const run = Math.round(p.activity * 0.5);
-  const sleep = p.sleepiness;
+/** 将 4 个高级人格参数映射为完整的转移表，可选叠加 InternalCatState 影响 */
+function paramsToTransitionTable(p: PersonalityParams, internal?: InternalCatState): TransitionTable {
+  // 内部状态加权叠加（~20-30% 影响）
+  const isBoost = internal ? Math.round(internal.sleepiness * 0.3) : 0;
+  const energyBoost = internal ? Math.round(internal.energy * 0.2) : 0;
+  const lonelinessMod = internal ? Math.round(internal.loneliness * 0.2) : 0;
+
+  const walk = Math.min(100, Math.round(p.activity * 0.5) + energyBoost);
+  const run = Math.min(100, Math.round(p.activity * 0.5) + energyBoost);
+  const sleep = Math.min(100, p.sleepiness + isBoost);
   const lick = p.grooming;
-  const play = Math.round(p.playfulness * 0.34);
+  const play = Math.min(100, Math.round(p.playfulness * 0.34) + lonelinessMod);
   const flt = Math.round(p.playfulness * 0.33);
   const atk = Math.round(p.playfulness * 0.33);
 
@@ -183,11 +189,14 @@ export function useCatBehavior() {
     setReminderEnabled,
   } = usePetStore();
 
-  // 从参数生成权重表
-  const tableRef = useRef<TransitionTable>(paramsToTransitionTable(personalityParams));
+  // 从参数生成权重表（叠加 InternalCatState 影响）
+  const tableRef = useRef<TransitionTable>(
+    paramsToTransitionTable(personalityParams, undefined),
+  );
 
   useEffect(() => {
-    tableRef.current = paramsToTransitionTable(personalityParams);
+    const internal = useCompanionStore.getState().internal_states[personalityParams.name];
+    tableRef.current = paramsToTransitionTable(personalityParams, internal);
   }, [personalityParams]);
 
   const pick = (current: PetAnimationState) => pickNext(current, tableRef.current);

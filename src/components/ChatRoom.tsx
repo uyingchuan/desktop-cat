@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useChatStore } from '../stores/useChatStore';
-import { useMemoryStore } from '../stores/useMemoryStore';
+import { useCompanionStore } from '../stores/useCompanionStore';
 import { chatCompletion } from '../services/llm';
 import { extractMemories, formatMemoriesForPrompt } from '../services/memory';
 import type { PersonalityParams } from '../types/pet';
 import type { ChatMessage } from '../stores/useChatStore';
+import type { MemoryItemV2 } from '../types/companion';
 import { SPEECH_STATES, speechesToRaw } from '../types/pet';
 import './ChatRoom.css';
 
@@ -56,7 +57,7 @@ function ChatRoom({ personality, mode = 'chat' }: { personality: string; mode?: 
   const [rawSpeeches, setRawSpeeches] = useState<Record<string, string>>({});
 
   const { conversations, addMessage, clearConversation, loadConversations } = useChatStore();
-  const { memories, loadMemories, updateMemories } = useMemoryStore();
+  const { getPersonalityMemoriesV2, loadCompanionData } = useCompanionStore();
 
   const loadConfig= useCallback(() => {
     Promise.all([
@@ -65,11 +66,14 @@ function ChatRoom({ personality, mode = 'chat' }: { personality: string; mode?: 
     ])
       .then(([c, chatData]) => {
         setConfig(c);
-        loadMemories(chatData.memories || {});
         loadConversations(chatData.conversations || {});
+        // 同时加载陪伴数据（含记忆 V2）
+        invoke<import('../types/companion').CompanionData>('get_companion_data')
+          .then((cd) => loadCompanionData(cd))
+          .catch(() => {});
       })
       .catch(() => {});
-  }, [loadMemories, loadConversations]);
+  }, [loadConversations, loadCompanionData]);
 
   useEffect(() => { loadConfig(); }, [loadConfig]);
 
@@ -157,7 +161,10 @@ function ChatRoom({ personality, mode = 'chat' }: { personality: string; mode?: 
     setLoading(true);
     addMessage(personality, { role: 'user', content: text });
 
-    const myMemories = memories[personality] || [];
+    // 记录互动（关系系统）
+    useCompanionStore.getState().recordInteraction(personality);
+
+    const myMemories = getPersonalityMemoriesV2(personality);
     const history = conversations[personality] || [];
     const messages = [
       { role: 'system' as const, content: getSystemPrompt(personality) + formatMemoriesForPrompt(myMemories) },
@@ -169,9 +176,18 @@ function ChatRoom({ personality, mode = 'chat' }: { personality: string; mode?: 
       const reply = await chatCompletion(messages, config.deepseek_api_key);
       addMessage(personality, { role: 'assistant', content: reply });
 
-      extractMemories(text, reply, myMemories, config.deepseek_api_key).then((newMemories) => {
+      extractMemories(text, reply, myMemories, personality, config.deepseek_api_key).then((newMemories) => {
         if (JSON.stringify(newMemories) !== JSON.stringify(myMemories)) {
-          updateMemories(personality, newMemories);
+          // 替换该人格的所有记忆：先删后加
+          const store = useCompanionStore.getState();
+          const oldIds = new Set(myMemories.map((m: MemoryItemV2) => m.id));
+          oldIds.forEach((id: string) => store.removeMemoryV2(id));
+          newMemories.forEach((m: MemoryItemV2) => store.addMemoryV2({
+            personality: m.personality,
+            content: m.content,
+            memory_type: m.memory_type,
+            importance: m.importance,
+          }));
         }
       });
     } catch {
@@ -179,7 +195,7 @@ function ChatRoom({ personality, mode = 'chat' }: { personality: string; mode?: 
     } finally {
       setLoading(false);
     }
-  }, [input, loading, config, personality, memories, conversations, addMessage, updateMemories]);
+  }, [input, loading, config, personality, conversations, addMessage, getPersonalityMemoriesV2]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

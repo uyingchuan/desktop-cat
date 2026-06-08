@@ -5,6 +5,7 @@ import { listen } from '@tauri-apps/api/event';
 import ChatRoom from './ChatRoom';
 import TodoPanel from './TodoPanel';
 import PersonalityEditor from './PersonalityEditor';
+import CompanionSettings from './CompanionSettings';
 import { useChatStore } from '../stores/useChatStore';
 import type { PersonalityParams } from '../types/pet';
 import { SPEECH_STATES, speechesToRaw } from '../types/pet';
@@ -138,6 +139,14 @@ function Dashboard() {
         <div className="sidebar-bottom-tabs">
           <div className="sidebar-divider" />
           <button
+            className={`sidebar-tab ${path === '/dashboard/companion' ? 'active' : ''}`}
+            onClick={() => navigate('/dashboard/companion')}
+            title="陪伴"
+          >
+            <span className="sidebar-tab-icon">🤝</span>
+            <span className="sidebar-tab-label">陪伴</span>
+          </button>
+          <button
             className={`sidebar-tab ${path === '/dashboard/todo' ? 'active' : ''}`}
             onClick={() => navigate('/dashboard/todo')}
             title="备忘录"
@@ -162,6 +171,7 @@ function Dashboard() {
           <Route path="new" element={<NewCatPage onCreated={(name) => navigate(`/dashboard/chat/${name}`)} />} />
           <Route path="todo" element={<TodoPanel />} />
           <Route path="settings" element={<PersonalityEditor />} />
+          <Route path="companion" element={<CompanionSettings />} />
           <Route path="*" element={null} />
         </Routes>
       </main>

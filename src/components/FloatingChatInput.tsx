@@ -2,11 +2,12 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { usePetStore } from '../stores/usePetStore';
 import { useChatStore } from '../stores/useChatStore';
-import { useMemoryStore } from '../stores/useMemoryStore';
+import { useCompanionStore } from '../stores/useCompanionStore';
 import { chatCompletion } from '../services/llm';
 import { extractMemories, formatMemoriesForPrompt } from '../services/memory';
 import type { PersonalityParams } from '../types/pet';
 import type { ChatMessage } from '../stores/useChatStore';
+import type { MemoryItemV2 } from '../types/companion';
 import './FloatingChatInput.css';
 
 interface Config {
@@ -30,7 +31,7 @@ function FloatingChatInput() {
 
   const { setSpeech, setChatting } = usePetStore();
   const { conversations, addMessage, loadConversations } = useChatStore();
-  const { memories, loadMemories, updateMemories } = useMemoryStore();
+  const { getPersonalityMemoriesV2, loadCompanionData } = useCompanionStore();
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -41,8 +42,11 @@ function FloatingChatInput() {
       .then(([config, chatData]) => {
         setApiKey(config.deepseek_api_key || null);
         setPersonality(config.active_personality);
-        loadMemories(chatData.memories || {});
         loadConversations(chatData.conversations || {});
+        // 加载陪伴数据（含记忆 V2）
+        invoke<import('../types/companion').CompanionData>('get_companion_data')
+          .then((cd) => loadCompanionData(cd))
+          .catch(() => {});
 
         let params: PersonalityParams | undefined;
         const found = config.personalities.find(p => p.name === config.active_personality);
@@ -69,7 +73,10 @@ function FloatingChatInput() {
     setLoading(true);
     addMessage(personality, { role: 'user', content: text });
 
-    const myMemories = memories[personality] || [];
+    // 记录互动（关系系统）
+    useCompanionStore.getState().recordInteraction(personality);
+
+    const myMemories = getPersonalityMemoriesV2(personality);
     const history = conversations[personality] || [];
     const messages = [
       { role: 'system' as const, content: systemPrompt + formatMemoriesForPrompt(myMemories) },
@@ -82,9 +89,18 @@ function FloatingChatInput() {
       addMessage(personality, { role: 'assistant', content: reply });
       setSpeech(reply);
 
-      extractMemories(text, reply, myMemories, apiKey).then((newMemories) => {
+      extractMemories(text, reply, myMemories, personality, apiKey).then((newMemories) => {
         if (JSON.stringify(newMemories) !== JSON.stringify(myMemories)) {
-          updateMemories(personality, newMemories);
+          // 替换该人格的所有记忆：先删后加
+          const store = useCompanionStore.getState();
+          const oldIds = new Set(myMemories.map((m: MemoryItemV2) => m.id));
+          oldIds.forEach((id: string) => store.removeMemoryV2(id));
+          newMemories.forEach((m: MemoryItemV2) => store.addMemoryV2({
+            personality: m.personality,
+            content: m.content,
+            memory_type: m.memory_type,
+            importance: m.importance,
+          }));
         }
       });
     } catch {
@@ -92,7 +108,7 @@ function FloatingChatInput() {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, apiKey, personality, systemPrompt, memories, conversations, addMessage, updateMemories, setSpeech]);
+  }, [input, loading, apiKey, personality, systemPrompt, conversations, addMessage, getPersonalityMemoriesV2, setSpeech]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

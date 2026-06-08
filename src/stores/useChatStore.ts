@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
-import { useMemoryStore } from './useMemoryStore';
+import { useCompanionStore } from './useCompanionStore';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -47,7 +47,10 @@ export const useChatStore = create<ChatStore>((set) => ({
         [personality]: [],
       };
       persist(conversations);
-      useMemoryStore.getState().clearMemories(personality);
+      // 清除该人格的 V2 记忆
+      const companionState = useCompanionStore.getState();
+      const personalityMemories = companionState.getPersonalityMemoriesV2(personality);
+      personalityMemories.forEach((m) => companionState.removeMemoryV2(m.id));
       return { conversations };
     }),
 }));

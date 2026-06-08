@@ -1,0 +1,241 @@
+/* ============================================================
+   Companion Settings — 复用 PersonalityEditor 的 .pe-* 模式
+   ============================================================ */
+
+/* 策略网格 */
+.cs-policy-grid {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cs-policy-field {
+  flex: 1;
+  min-width: 120px;
+  background: #f8f9fb;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.cs-policy-field label {
+  font-size: 12px;
+  color: #888;
+  width: 100%;
+}
+
+.cs-policy-field input {
+  width: 60px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+  text-align: center;
+}
+
+.cs-field-hint {
+  font-size: 12px;
+  color: #999;
+}
+
+.cs-disabled-notice {
+  color: #999;
+  font-size: 13px;
+  text-align: center;
+  margin-top: 8px;
+  font-style: italic;
+}
+
+/* 关系卡片 */
+.cs-rel-card {
+  background: #f8f9fb;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.cs-rel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.cs-rel-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* 阶段徽章 */
+.cs-stage-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.cs-stage-new {
+  background: #e8e8e8;
+  color: #888;
+}
+
+.cs-stage-familiar {
+  background: #fff3d6;
+  color: #b8860b;
+}
+
+.cs-stage-close {
+  background: #ffe0e0;
+  color: #c44;
+}
+
+/* 进度条 */
+.cs-rel-bars {
+  margin-bottom: 8px;
+}
+
+.cs-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.cs-bar-label {
+  font-size: 12px;
+  color: #888;
+  width: 48px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.cs-bar-track {
+  flex: 1;
+  height: 8px;
+  background: #e8e8e8;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.cs-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.cs-bar-familiarity { background: #4a90d9; }
+.cs-bar-trust { background: #07c160; }
+.cs-bar-energy { background: #ff9500; }
+.cs-bar-curiosity { background: #af52de; }
+.cs-bar-loneliness { background: #ff3b30; }
+.cs-bar-sleepiness { background: #5ac8fa; }
+
+.cs-bar-val {
+  font-size: 12px;
+  color: #333;
+  font-weight: 600;
+  width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* 关系统计 */
+.cs-rel-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #999;
+}
+
+.cs-reset-btn {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  color: #d94a4a !important;
+  border-color: #d94a4a !important;
+}
+
+.cs-reset-btn:hover {
+  background: #fde8e8 !important;
+}
+
+/* 记忆浏览器 */
+.cs-memory-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.cs-memory-count {
+  font-size: 13px;
+  color: #999;
+}
+
+.cs-empty-hint {
+  color: #999;
+  font-size: 13px;
+  text-align: center;
+  padding: 16px 0;
+}
+
+.cs-memory-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.cs-memory-item {
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  position: relative;
+}
+
+.cs-memory-type {
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.cs-memory-importance {
+  color: #ff9500;
+  margin-left: 6px;
+}
+
+.cs-memory-content {
+  font-size: 14px;
+  color: #333;
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.cs-memory-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: #bbb;
+}
+
+.cs-memory-delete {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+}
+
+.cs-memory-delete:hover {
+  color: #d94a4a;
+}
