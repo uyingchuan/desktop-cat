@@ -11,6 +11,7 @@ export interface PersonalityParams {
   speeches?: Record<string, string[]>; // 自定义话术，key 为动画状态名
   systemPrompt?: string; // 聊天系统提示词
   displayName?: string; // 猫猫展示名称
+  lastChatTime?: number; // 最后聊天时间戳（秒）
 }
 
 // 内置猫格预设参数

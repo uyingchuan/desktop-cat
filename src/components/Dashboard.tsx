@@ -5,6 +5,7 @@ import { listen } from '@tauri-apps/api/event';
 import ChatRoom from './ChatRoom';
 import TodoPanel from './TodoPanel';
 import PersonalityEditor from './PersonalityEditor';
+import { useChatStore } from '../stores/useChatStore';
 import type { PersonalityParams } from '../types/pet';
 import './Dashboard.css';
 
@@ -17,22 +18,56 @@ interface PersonalityInfo {
   name: string;
   id: string;
   label: string;
+  lastTime: number;
 }
 
 function Dashboard() {
   const [personalities, setPersonalities] = useState<PersonalityInfo[]>([]);
   const navigate = useNavigate();
   const location = useLocation();
+  const conversations = useChatStore((s) => s.conversations);
 
-  const loadPersonalities = useCallback(() => {
+  // 从 config 加载所有猫格，按 lastChatTime 排序
+  const loadAndSort = useCallback(() => {
     invoke<Config>('get_config')
       .then((c) => {
+        const conv = useChatStore.getState().conversations;
         const infos: PersonalityInfo[] = (c.personalities || [])
-          .map((p) => ({ name: p.name, id: p.id, label: p.displayName || p.name }));
+          .map((p) => {
+            const persistedTime = p.lastChatTime || 0;
+            const memMsgs = conv[p.name] || [];
+            const memTime = memMsgs.length > 0 ? memMsgs[memMsgs.length - 1].timestamp : 0;
+            const lastTime = Math.max(persistedTime, memTime);
+            return { name: p.name, id: p.id, label: p.displayName || p.name, lastTime };
+          })
+          .sort((a, b) => b.lastTime - a.lastTime);
         setPersonalities(infos);
       })
       .catch(() => {});
   }, []);
+
+  const loadPersonalities = loadAndSort;
+
+  useEffect(() => { loadPersonalities(); }, [loadPersonalities]);
+
+  // conversations 变化时重新排序
+  useEffect(() => {
+    setPersonalities((prev) => {
+      const sorted = [...prev].sort((a, b) => {
+        const ta = (conversations[a.name] || []).slice(-1)[0]?.timestamp || 0;
+        const tb = (conversations[b.name] || []).slice(-1)[0]?.timestamp || 0;
+        return tb - ta;
+      });
+      // 避免不必要的状态更新
+      const same = sorted.every((p, i) => p.id === prev[i]?.id);
+      return same ? prev : sorted;
+    });
+  }, [conversations]);
+
+  useEffect(() => {
+    const unlisten = listen('personality-list-changed', () => loadPersonalities());
+    return () => { unlisten.then((fn) => fn()); };
+  }, [loadPersonalities]);
 
   useEffect(() => { loadPersonalities(); }, [loadPersonalities]);
 

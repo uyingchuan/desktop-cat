@@ -65,6 +65,8 @@ struct PersonalityParams {
     system_prompt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "displayName")]
     display_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "lastChatTime")]
+    last_chat_time: Option<i64>,
 }
 
 fn default_true() -> bool { true }
@@ -96,6 +98,7 @@ impl Default for PersistedConfig {
                     speeches: None,
                     system_prompt: Some("你是一只慵懒安静的桌面猫猫。你喜欢睡觉和舔毛。回复要简短（1-2句话），语气温柔慵懒，带点傲娇，用\"喵\"结尾。你是用户的桌面伙伴，偶尔关心用户。".to_string()),
                     display_name: None,
+                    last_chat_time: None,
                 },
                 PersonalityParams {
                     id: "active".to_string(), name: "active".to_string(),
@@ -103,6 +106,7 @@ impl Default for PersistedConfig {
                     speeches: None,
                     system_prompt: Some("你是一只活泼好动的桌面猫猫。你喜欢跑跳、玩耍、抓东西。回复要简短（1-2句话），语气活泼可爱，用\"喵\"结尾。你是用户的桌面伙伴，经常鼓励和逗用户开心。".to_string()),
                     display_name: None,
+                    last_chat_time: None,
                 },
             ],
             custom_personalities: HashMap::new(),
@@ -390,6 +394,17 @@ fn save_conversations(
     app: tauri::AppHandle,
     conversations: HashMap<String, Vec<ChatMessage>>,
 ) -> Result<(), String> {
+    // 更新对应猫格的最后聊天时间
+    let mut config = load_config(&app);
+    for (name, msgs) in &conversations {
+        if let Some(last_msg) = msgs.last() {
+            if let Some(p) = config.personalities.iter_mut().find(|p| p.name == *name) {
+                p.last_chat_time = Some(last_msg.timestamp);
+            }
+        }
+    }
+    save_config(&app, &config);
+
     let mut data = load_chat_data(&app);
     data.conversations = conversations;
     save_chat_data(&app, &data);
