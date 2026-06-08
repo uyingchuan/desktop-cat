@@ -1,155 +1,169 @@
-# Neko Desktop Cat
+# 小橘窝 - Neko Desktop Cat
 
-A Tauri v2 desktop pet app featuring a pixel-art cat with AI chat, personality system, todo reminders, and tray notifications.
+A Tauri v2 desktop pet app featuring a pixel-art cat with multi-personality AI chat, memory, todo reminders, and system tray integration. The cat lives in a transparent always-on-top overlay window; all management UI is in a separate dashboard window.
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| Desktop Shell | Tauri v2 (Rust) |
-| Frontend | React 19 + TypeScript + Zustand v5 |
+| Desktop | Tauri v2 (Rust), tray-icon + notification plugins |
+| Frontend | React 19 + TypeScript + Zustand v5 + React Router |
 | Build | Vite 8 |
-| AI API | DeepSeek (OpenAI-compatible) |
-| Animation | CSS `@keyframes` sprite sheet |
-| Package Manager | pnpm |
+| AI | DeepSeek API (OpenAI-compatible chat completions) |
+| Animation | CSS `@keyframes` with `steps()` for 32x32 pixel sprite sheets |
+
+## Windows
+
+Two Tauri webview windows, each with independent JS context:
+
+| Label | Size | Style | Route | Purpose |
+|-------|------|-------|-------|---------|
+| `main` | 120×150 | Transparent, always-on-top, skip-taskbar, no decorations | `/*` | Cat overlay |
+| `dashboard` | 700×520 | Standard decorated, titled "小橘窝" | `/#/dashboard/*` | Chat, todo, settings |
+
+**Important**: Each webview has isolated JS context. Zustand stores are NOT shared across windows. Cross-window communication goes through Rust backend (persist → `app.emit()` global event → reload on other side).
 
 ## Project Structure
 
 ```
-src/                  # React frontend
-├── main.tsx          # Entry point
-├── App.tsx           # Hash router (#/ → Cat, #/settings, #/chat, #/todo)
+src/
+├── main.tsx              # React entry, HashRouter
+├── App.tsx               # Route: /* → Cat, /dashboard/* → Dashboard
 ├── components/
-│   ├── Cat.tsx       # Main cat window (click/double-click handlers)
-│   ├── CatSprite.tsx # CSS sprite animation renderer
-│   ├── SpeechBubble.tsx  # Auto-dismissing speech bubble (2.5s)
+│   ├── Cat.tsx           # Main cat overlay (click/double-click/drag)
+│   ├── CatSprite.tsx     # CSS sprite animation renderer (32x32 → 3x scale)
+│   ├── SpeechBubble.tsx  # Auto-dismissing text bubble (2.5s)
 │   ├── FloatingChatInput.tsx # Inline chat overlay (double-click cat)
-│   ├── ChatRoom.tsx      # Full chat window with history
-│   ├── PersonalityEditor.tsx # Personality/settings management
-│   └── TodoPanel.tsx     # Todo/memo list with reminder UI
+│   ├── Dashboard.tsx     # Sidebar + nested router for all management UI
+│   ├── ChatRoom.tsx      # Chat panel + per-personality settings editor
+│   ├── PersonalityEditor.tsx # Global settings (API key, toggles)
+│   └── TodoPanel.tsx     # Todo list with repeat reminder UI
 ├── hooks/
-│   └── useCatBehavior.ts # Autonomous behavior state machine + reminders
+│   └── useCatBehavior.ts # Autonomous behavior FSM, 30-min reminder, event listeners
 ├── stores/
-│   ├── usePetStore.ts    # Pet state (position, animation, personality)
-│   ├── useChatStore.ts   # Per-personality conversation history
+│   ├── usePetStore.ts    # Cat state: position, animation, personality, speech, reminding
+│   ├── useChatStore.ts   # Per-personality conversations (max 100 msgs, timestamped)
 │   ├── useMemoryStore.ts # AI-extracted user facts per personality
-│   └── useTodoStore.ts   # Todo items with reminder support
+│   └── useTodoStore.ts   # Todo items with reminder fields, auto-persist
 ├── services/
-│   ├── llm.ts            # DeepSeek API client (chatCompletion)
-│   ├── memory.ts         # Auto memory extraction via LLM
-│   └── reminderChat.ts   # Generate personality-styled reminder messages
+│   ├── llm.ts            # chatCompletion(messages, apiKey) → DeepSeek
+│   ├── memory.ts         # extractMemories() + formatMemoriesForPrompt()
+│   └── reminderChat.ts   # generateReminderMessage() — LLM-styled reminder text
 ├── types/
-│   ├── pet.ts            # PetState, PersonalityParams, animation types
+│   ├── pet.ts            # PersonalityParams, PetAnimationState, BUILTIN_PARAMS
 │   └── todo.ts           # TodoItem, RepeatType
-├── animation/
-│   ├── animations.css    # CSS @keyframes for 11 animation states
-│   └── spriteConfig.ts   # Sprite frame counts and timing
-└── assets/
-    └── cat-pixel-animations/  # 11 animation types, each left/right
+└── animation/
+    ├── animations.css    # @keyframes for 11 animation states
+    └── spriteConfig.ts   # Frame counts, timing, sprite imports
 
-src-tauri/            # Rust backend
+src-tauri/
 ├── src/
-│   ├── lib.rs        # All Tauri commands, tray, config, persistence, reminders
-│   └── main.rs       # Rust entry point (windows_subsystem)
-├── tauri.conf.json   # Window config (120x150, transparent, always-on-top)
-├── Cargo.toml        # Rust deps: tauri, serde, tauri-plugin-notification
+│   ├── lib.rs            # All Tauri commands, tray, persistence, background tasks
+│   └── main.rs           # Entry point (windows_subsystem = "windows")
+├── tauri.conf.json       # Window definitions
+├── Cargo.toml            # tauri, serde, tauri-plugin-notification, tauri-plugin-log
 ├── capabilities/
-│   └── default.json  # Tauri v2 permissions (windows: main,settings,todo,chat)
-└── icons/            # 32x32.png for tray
+│   └── default.json      # Permissions for main + dashboard windows
+└── icons/                # 32x32.png (tray icon)
 ```
 
-## Windows and Routing
+## Dashboard Routing
 
-Four Tauri webview windows, each with independent JS context:
+Dashboard uses React Router with sidebar navigation:
 
-| Window | Label | Hash | Size | Notes |
-|--------|-------|------|------|-------|
-| Main cat | `"main"` | `#/` | 120×150 | Transparent, always-on-top, no decorations |
-| Settings | `"settings"` | `#/settings` | 700×520 | Non-resizable |
-| Chat | `"chat"` | `#/chat` | 400×560 | Resizable |
-| Todo | `"todo"` | `#/todo` | 360×500 | Resizable |
+| Route | Content | Sidebar Tab |
+|-------|---------|-------------|
+| `/dashboard/chat/:personalityId` | ChatRoom (chat mode) | Per-personality, sorted by lastChatTime |
+| `/dashboard/chat/:personalityId/settings` | ChatRoom (settings mode) | — |
+| `/dashboard/todo` | TodoPanel | Bottom tab "Todo" |
+| `/dashboard/settings` | PersonalityEditor (global) | Bottom tab "Settings" |
 
-**Important**: Each window has its own Zustand store instance. Cross-window state sharing goes through Rust backend (persist → emit event → reload). Never assume stores are shared between windows.
+`personalityId` is the `id` field on `PersonalityParams` (not `name`). `ChatRoute` resolves `personalityId` → `personality.name` before passing to ChatRoom.
 
-## Key Features
+## Personality System
 
-### Cat Behavior (useCatBehavior.ts)
-- Weighted random state machine: 11 animation states (idle, idle2, walking, running, sleeping, playing, floating, licking, attacking, hurt, dead)
-- 4 personality sliders map to transition weights: activity, sleepiness, grooming, playfulness
-- Window movement via `requestAnimationFrame` + `setPosition`
-- Draggable by user, autonomous walking otherwise
-- Speech bubbles with 30% chance on state transition
+Each personality stored as `PersonalityParams` in a `Vec` in `config.json`:
 
-### Personality System
-- 2 built-in personalities: `calm` (慵懒) and `active` (活泼)
-- Custom personalities with 4 sliders (0-100), custom speech lines per animation state, custom system prompts
-- System prompt used for both chat and reminder generation
-- Persisted in `config.json`
-
-### Chat / AI
-- DeepSeek API integration (`services/llm.ts` — `chatCompletion(messages, apiKey)`)
-- Two chat interfaces: full ChatRoom window + inline FloatingChatInput
-- Per-personality conversation history (max 100 messages)
-- AI auto-extracts user facts into memories (`services/memory.ts`)
-- Memories injected into system prompt via `formatMemoriesForPrompt`
-
-### Todo / Memo (TodoPanel.tsx)
-- CRUD todo list with completion toggle and delete
-- Per-item reminder: one-shot (`once`), daily repeat (`daily`), interval repeat (`interval`)
-- Reminder popover with datetime-local, time, or interval picker
-- New items appear at top
-- Data persisted to `todo_data.json`
-
-### Reminder System
-Three types of reminders:
-
-1. **30-min break reminder**: Timer in `useCatBehavior.ts` → cat walks + speech bubble + AI chat message + tray flash
-2. **Todo one-shot**: `remind_at` timestamp, cleared after fire
-3. **Todo repeat**: daily (24h advance) or interval (periodic advance), managed by Rust `check_todo_reminders`
-
-**Reminder flow**:
-```
-Reminder fires → Rust check_todo_reminders / frontend timer
-  → OS notification via tauri-plugin-notification
-  → emit("reminder-triggered", text) to main window (for todo)
-  → triggerReminderChat(): LLM generates personality-styled message
-  → useChatStore.addMessage() + persist to disk
-  → Rust broadcast_chat_message() → global event to chat window
-  → invoke("set_tray_alert", message) → tray flash + tooltip
-User dismisses: click cat OR click tray icon
-  → stop flash, stop cat animation, open chat room
+```typescript
+interface PersonalityParams {
+  id: string;           // UUID
+  name: string;         // Unique key for conversations/memories
+  displayName?: string; // Shown in UI
+  activity: number;     // 0-100
+  sleepiness: number;   // 0-100
+  grooming: number;     // 0-100
+  playfulness: number;  // 0-100
+  speeches?: Record<string, string[]>;    // Custom per-state speech lines
+  systemPrompt?: string;                   // Chat system prompt
+  lastChatTime?: number;                   // For tab sorting
+}
 ```
 
-### Tray Icon
-- Context menu: show/hide, personality switch, toggle text, toggle reminder, open windows, restart, quit
-- Left click: toggle main window visibility (or open chat if flashing)
-- Flashing: `set_icon(Some(normal))` ↔ `set_icon(None)` every 600ms
-- Tooltip shows latest reminder message during flash
-- Flashing controlled by `TrayAlertState.flashing` (AtomicBool)
+Two built-in personalities (`calm` / `active`) with presets in `BUILTIN_PARAMS`. Custom personalities created/edited/deleted via `save_personality` / `delete_personality` commands. Backward compat: old `custom_personalities` HashMap is migrated to `personalities` Vec on load.
 
-### Data Persistence
-Three JSON files in app data dir:
+The 4 sliders (activity, sleepiness, grooming, playfulness) are mapped to a weighted state transition table in `useCatBehavior.ts` via `paramsToTransitionTable()`.
 
-| File | Rust Struct | Contents |
-|------|-------------|----------|
-| `config.json` | `PersistedConfig` | active_personality, custom_personalities, show_text, reminder_enabled, deepseek_api_key |
-| `chat_data.json` | `ChatData` | conversations (per-personality), memories (per-personality) |
-| `todo_data.json` | `TodoData` | items (Vec of TodoItem with repeat_type, repeat_interval, remind_at) |
+## Stores (Zustand)
 
-## Naming Conventions
+**usePetStore**: `position`, `animationState`, `mood`, `facingDirection`, `personality` (string), `personalityParams`, `speech`, `showText`, `reminding`, `reminderEnabled`, `chatting`
 
-- Rust structs: PascalCase (`TodoItem`, `ChatData`)
-- Rust fields: snake_case (`remind_at`, `created_at`)
-- JS/TS fields: snake_case to match Rust serialization (`remind_at`, `repeat_type`)
-- React components: PascalCase (`TodoPanel`, `ChatRoom`)
-- Hooks: camelCase with `use` prefix (`useCatBehavior`)
-- Stores: camelCase with `use` prefix (`useTodoStore`)
-- CSS classes: kebab-case (`.todo-reminder-btn`)
+**useChatStore**: `conversations: Record<string, ChatMessage[]>` — keyed by personality name. `ChatMessage: { role, content, timestamp }`. MAX 100 per personality. `addMessage` auto-stamps timestamp and persists.
 
-## Common Pitfalls
+**useTodoStore**: `items: TodoItem[]`. CRUD + `setReminder(id, remindAt, repeatType, repeatInterval)` + `clearReminder`. Auto-persists.
 
-1. **Cross-window state**: Each Tauri webview has isolated JS context. Always use Rust `app.emit()` (global) for cross-window events, never frontend `emit()` (may not cross webview boundaries).
-2. **Capabilities**: New windows must be added to `capabilities/default.json` `windows` array.
-3. **Serde defaults**: Always add `#[serde(default)]` to new fields for backward compatibility with existing JSON data.
-4. **Tauri plugin registration**: New plugins need `.plugin(...)` in builder + capability permission + Cargo.toml dependency.
-5. **TrayAlertState**: Uses `Arc<AtomicBool>` for thread-safe flashing control. The `set_tray_alert` command spawns a `std::thread` with the tray handle.
+**useMemoryStore**: `memories: Record<string, string[]>` — facts per personality. `updateMemories` / `clearMemories`.
+
+## Rust Backend Commands
+
+| Command | Purpose |
+|---------|---------|
+| `get_config` | Return PersistedConfig (personalities, toggles, api key) |
+| `get_chat_data` | Return ChatData (conversations + memories) |
+| `save_personality` | Upsert a personality, rebuild tray, emit events |
+| `delete_personality` | Remove, fallback to first, blocks if last one |
+| `set_active_personality` | Switch active personality |
+| `set_api_key` | Save DeepSeek API key |
+| `set_show_text` | Toggle speech bubble visibility |
+| `set_reminder_enabled` | Toggle 30-min rest reminder |
+| `set_todo_reminder_enabled` | Toggle todo reminder |
+| `open_dashboard` | Show/focus dashboard window, navigate to tab |
+| `save_memories` | Persist per-personality memories |
+| `save_conversations` | Persist all conversations, update lastChatTime |
+| `broadcast_chat_message` | Emit `chat-new-message` global event |
+| `get_todo_data` | Return all todo items |
+| `save_todo_items` | Persist all todo items |
+| `set_tray_alert` | Start/stop tray icon flash + set tooltip |
+| `get_personality` | Return active personality name |
+
+## Reminder System
+
+### 30-minute Rest Reminder
+- Triggered by `setTimeout` in `useCatBehavior.ts`
+- Cat enters `reminding` state: walks + speech bubble loop
+- Also fires AI reminder: `generateReminderMessage() → addMessage() → broadcast → tray flash`
+- Dismissed by: clicking cat, clicking tray icon, or toggling reminder off
+
+### Todo Reminders
+- Background thread in Rust (`check_todo_reminders`) runs on startup + every 30s
+- Checks all items where `remind_at <= now`
+- Fires OS notification + emits `reminder-triggered` to main window
+- Frontend generates AI chat message + tray flash
+- Repeat modes:
+  - `"once"` — clear `remind_at` after fire
+  - `"daily"` — advance `remind_at` by 86400s
+  - `"interval"` — advance `remind_at` by `repeat_interval` seconds
+
+### Tray Alert
+- `set_tray_alert(message)` starts a background thread alternating `set_icon(Some(icon))` / `set_icon(None)` every 600ms
+- Sets tooltip to the message text
+- Left-click during flash: dismiss reminder, open dashboard chat, stop flash
+- After message sent: `broadcast_chat_message` Rust command emits `chat-new-message` event globally → dashboard chat tab reloads
+
+## Important Patterns
+
+1. **Cross-window events**: Always use Rust `app.emit()` (global to all windows), never frontend `emit()` from `@tauri-apps/api/event` (may not cross webview boundaries).
+2. **New windows**: Must be added to `capabilities/default.json` `"windows"` array or they won't have permission to use `listen`, `invoke`, etc.
+3. **Backward compatibility**: Add `#[serde(default)]` to all new Rust struct fields. Old data files won't have them.
+4. **Personality keying**: Chat conversations and memories are keyed by `name` (not `id`), since name is stable and user-visible. Todo items are global (not per-personality).
+5. **TrayAlertState**: Uses `Arc<AtomicBool>` for thread-safe flashing control. `set_tray_alert` spawns `std::thread::spawn`.
+6. **Naming**: Rust `snake_case`, TS also `snake_case` (matching serde serialization), React `PascalCase` components, CSS `kebab-case`.
