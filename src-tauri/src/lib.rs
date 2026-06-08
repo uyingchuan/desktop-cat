@@ -338,70 +338,30 @@ fn save_todo_items(
     Ok(())
 }
 
-#[tauri::command]
-fn open_todo(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("todo") {
-        window.show().map_err(|e| e.to_string())?;
-        window.set_focus().map_err(|e| e.to_string())?;
+/// 打开/创建 Dashboard 统一窗口的内部辅助函数
+fn open_dashboard_inner(app: &tauri::AppHandle, tab: &str) {
+    if let Some(window) = app.get_webview_window("dashboard") {
+        window.show().ok();
+        window.set_focus().ok();
+        window.emit("navigate-tab", tab).ok();
     } else {
+        let url = format!("/#/dashboard?tab={}", tab);
         let _ = WebviewWindowBuilder::new(
-            &app,
-            "todo",
-            WebviewUrl::App("/#/todo".into()),
+            app,
+            "dashboard",
+            WebviewUrl::App(url.into()),
         )
-        .title("备忘录")
-        .inner_size(360.0, 500.0)
+        .title("桌面猫")
+        .inner_size(700.0, 520.0)
         .resizable(true)
         .decorations(true)
-        .build()
-        .map_err(|e| e.to_string())?;
+        .build();
     }
-    Ok(())
 }
 
 #[tauri::command]
-fn open_chat(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("chat") {
-        window.show().map_err(|e| e.to_string())?;
-        window.set_focus().map_err(|e| e.to_string())?;
-    } else {
-        let _ = WebviewWindowBuilder::new(
-            &app,
-            "chat",
-            WebviewUrl::App("/#/chat".into()),
-        )
-        .title("聊天室")
-        .inner_size(400.0, 560.0)
-        .resizable(true)
-        .decorations(true)
-        .build()
-        .map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-#[tauri::command]
-fn open_settings(app: tauri::AppHandle) -> Result<(), String> {
-    if app.get_webview_window("settings").is_some() {
-        // 窗口已存在，聚焦
-        app.get_webview_window("settings").unwrap().show().ok();
-        app.get_webview_window("settings").unwrap().set_focus().ok();
-        return Ok(());
-    }
-
-    let app_ref: &tauri::AppHandle = &app;
-    let _settings = WebviewWindowBuilder::new(
-        app_ref,
-        "settings",
-        WebviewUrl::App("/#/settings".into()),
-    )
-    .title("猫格管理")
-    .inner_size(700.0, 520.0)
-    .resizable(false)
-    .decorations(true)
-    .build()
-    .map_err(|e| e.to_string())?;
-
+fn open_dashboard(app: tauri::AppHandle, tab: String) -> Result<(), String> {
+    open_dashboard_inner(&app, &tab);
     Ok(())
 }
 
@@ -587,7 +547,7 @@ fn check_todo_reminders(app: &tauri::AppHandle) {
             }
         }
         save_todo_data(app, &data);
-        if let Some(window) = app.get_webview_window("todo") {
+        if let Some(window) = app.get_webview_window("dashboard") {
             window.emit("todo-reminder-fired", ()).ok();
         }
     }
@@ -608,15 +568,13 @@ pub fn run() {
             get_chat_data,
             save_personality,
             delete_personality,
-            open_settings,
+            open_dashboard,
             set_api_key,
-            open_chat,
             save_memories,
             save_conversations,
             broadcast_chat_message,
             get_todo_data,
             save_todo_items,
-            open_todo,
             set_tray_alert,
         ])
         .setup(|app| {
@@ -725,59 +683,14 @@ pub fn run() {
                                 window.emit("reminder-toggled", config.reminder_enabled).ok();
                             }
                         }
-                        "open_settings" => {
-                            if app.get_webview_window("settings").is_some() {
-                                app.get_webview_window("settings").unwrap().show().ok();
-                                app.get_webview_window("settings").unwrap().set_focus().ok();
-                            } else {
-                                let app_ref: &tauri::AppHandle = &app;
-                                let _ = WebviewWindowBuilder::new(
-                                    app_ref,
-                                    "settings",
-                                    WebviewUrl::App("/#/settings".into()),
-                                )
-                                .title("猫格管理")
-                                .inner_size(700.0, 520.0)
-                                .resizable(false)
-                                .decorations(true)
-                                .build();
-                            }
-                        }
-                        "open_chat" => {
-                            if let Some(window) = app.get_webview_window("chat") {
-                                window.show().ok();
-                                window.set_focus().ok();
-                            } else {
-                                let app_ref: &tauri::AppHandle = &app;
-                                let _ = WebviewWindowBuilder::new(
-                                    app_ref,
-                                    "chat",
-                                    WebviewUrl::App("/#/chat".into()),
-                                )
-                                .title("聊天室")
-                                .inner_size(400.0, 560.0)
-                                .resizable(true)
-                                .decorations(true)
-                                .build();
-                            }
-                        }
-                        "open_todo" => {
-                            if let Some(window) = app.get_webview_window("todo") {
-                                window.show().ok();
-                                window.set_focus().ok();
-                            } else {
-                                let app_ref: &tauri::AppHandle = &app;
-                                let _ = WebviewWindowBuilder::new(
-                                    app_ref,
-                                    "todo",
-                                    WebviewUrl::App("/#/todo".into()),
-                                )
-                                .title("备忘录")
-                                .inner_size(360.0, 500.0)
-                                .resizable(true)
-                                .decorations(true)
-                                .build();
-                            }
+                        "open_settings" | "open_chat" | "open_todo" => {
+                            let tab = match id.as_str() {
+                                "open_settings" => "settings",
+                                "open_chat" => "chat",
+                                "open_todo" => "todo",
+                                _ => "chat",
+                            };
+                            open_dashboard_inner(app, tab);
                         }
                         "restart" => {
                             app.restart();
@@ -834,22 +747,10 @@ pub fn run() {
                             if let Some(window) = app.get_webview_window("main") {
                                 window.emit("reminder-dismissed", ()).ok();
                             }
-                            // 打开聊天室
-                            if let Some(window) = app.get_webview_window("chat") {
-                                window.show().ok();
-                                window.set_focus().ok();
+                            // 打开 Dashboard（聊天标签）
+                            open_dashboard_inner(app, "chat");
+                            if let Some(window) = app.get_webview_window("dashboard") {
                                 window.emit("chat-reload", ()).ok();
-                            } else {
-                                let _ = WebviewWindowBuilder::new(
-                                    app,
-                                    "chat",
-                                    WebviewUrl::App("/#/chat".into()),
-                                )
-                                .title("聊天室")
-                                .inner_size(400.0, 560.0)
-                                .resizable(true)
-                                .decorations(true)
-                                .build();
                             }
                         } else if let Some(window) = app.get_webview_window("main") {
                             if window.is_visible().unwrap_or(true) {

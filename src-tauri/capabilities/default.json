@@ -4,9 +4,7 @@
   "description": "enables the default permissions",
   "windows": [
     "main",
-    "settings",
-    "todo",
-    "chat"
+    "dashboard"
   ],
   "permissions": [
     "core:default",

@@ -1,20 +1,18 @@
 import Cat from './components/Cat';
-import PersonalityEditor from './components/PersonalityEditor';
-import ChatRoom from './components/ChatRoom';
-import TodoPanel from './components/TodoPanel';
+import Dashboard from './components/Dashboard';
 import './App.css';
 
 function App() {
   const hash = window.location.hash;
-  if (hash === '#/settings') {
-    return <PersonalityEditor />;
+
+  // Dashboard 统一窗口：通过 tab 参数指定初始标签
+  if (hash.startsWith('#/dashboard')) {
+    const params = new URLSearchParams(hash.split('?')[1] || '');
+    const initialTab = params.get('tab') || 'chat';
+    return <Dashboard initialTab={initialTab} />;
   }
-  if (hash === '#/chat') {
-    return <ChatRoom />;
-  }
-  if (hash === '#/todo') {
-    return <TodoPanel />;
-  }
+
+  // 主猫咪窗口（无哈希）
   return <Cat />;
 }
 
