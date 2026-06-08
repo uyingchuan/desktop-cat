@@ -11,8 +11,8 @@ import './FloatingChatInput.css';
 
 interface Config {
   active_personality: string;
+  personalities: PersonalityParams[];
   deepseek_api_key?: string;
-  custom_personalities: Record<string, PersonalityParams>;
 }
 
 interface ChatData {
@@ -45,9 +45,8 @@ function FloatingChatInput() {
         loadConversations(chatData.conversations || {});
 
         let params: PersonalityParams | undefined;
-        if (config.custom_personalities[config.active_personality]) {
-          params = config.custom_personalities[config.active_personality];
-        }
+        const found = config.personalities.find(p => p.name === config.active_personality);
+        if (found) { params = found; }
         setSystemPrompt(params?.systemPrompt || '你是一只可爱的桌面猫猫，回复要简短可爱（1-2句话），用"喵"结尾。');
       })
       .catch(() => {});

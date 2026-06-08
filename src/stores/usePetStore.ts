@@ -23,7 +23,7 @@ export const usePetStore = create<PetStore>((set) => ({
   mood: 'happy',
   facingDirection: 'left',
   personality: 'calm',
-  personalityParams: { id: 'calm', activity: 20, sleepiness: 70, grooming: 60, playfulness: 15 },
+  personalityParams: { id: 'calm', name: 'calm', activity: 20, sleepiness: 70, grooming: 60, playfulness: 15 },
   speech: null,
   showText: true,
   reminding: false,

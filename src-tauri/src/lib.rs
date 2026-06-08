@@ -53,6 +53,8 @@ impl Default for TodoData {
 struct PersonalityParams {
     #[serde(default)]
     id: String,
+    #[serde(default)]
+    name: String,
     activity: u8,
     sleepiness: u8,
     grooming: u8,
@@ -70,6 +72,10 @@ fn default_true() -> bool { true }
 #[derive(Serialize, Deserialize, Clone)]
 struct PersistedConfig {
     active_personality: String,
+    #[serde(default)]
+    personalities: Vec<PersonalityParams>,
+    // 旧格式兼容
+    #[serde(default, skip_serializing)]
     custom_personalities: HashMap<String, PersonalityParams>,
     #[serde(default = "default_true")]
     show_text: bool,
@@ -81,24 +87,25 @@ struct PersistedConfig {
 
 impl Default for PersistedConfig {
     fn default() -> Self {
-        let mut customs = HashMap::new();
-        customs.insert("calm".to_string(), PersonalityParams {
-            id: "calm".to_string(),
-            activity: 20, sleepiness: 70, grooming: 60, playfulness: 15,
-            speeches: None,
-            system_prompt: Some("你是一只慵懒安静的桌面猫猫。你喜欢睡觉和舔毛。回复要简短（1-2句话），语气温柔慵懒，带点傲娇，用\"喵\"结尾。你是用户的桌面伙伴，偶尔关心用户。".to_string()),
-            display_name: None,
-        });
-        customs.insert("active".to_string(), PersonalityParams {
-            id: "active".to_string(),
-            activity: 70, sleepiness: 15, grooming: 20, playfulness: 65,
-            speeches: None,
-            system_prompt: Some("你是一只活泼好动的桌面猫猫。你喜欢跑跳、玩耍、抓东西。回复要简短（1-2句话），语气活泼可爱，用\"喵\"结尾。你是用户的桌面伙伴，经常鼓励和逗用户开心。".to_string()),
-            display_name: None,
-        });
         Self {
             active_personality: "calm".to_string(),
-            custom_personalities: customs,
+            personalities: vec![
+                PersonalityParams {
+                    id: "calm".to_string(), name: "calm".to_string(),
+                    activity: 20, sleepiness: 70, grooming: 60, playfulness: 15,
+                    speeches: None,
+                    system_prompt: Some("你是一只慵懒安静的桌面猫猫。你喜欢睡觉和舔毛。回复要简短（1-2句话），语气温柔慵懒，带点傲娇，用\"喵\"结尾。你是用户的桌面伙伴，偶尔关心用户。".to_string()),
+                    display_name: None,
+                },
+                PersonalityParams {
+                    id: "active".to_string(), name: "active".to_string(),
+                    activity: 70, sleepiness: 15, grooming: 20, playfulness: 65,
+                    speeches: None,
+                    system_prompt: Some("你是一只活泼好动的桌面猫猫。你喜欢跑跳、玩耍、抓东西。回复要简短（1-2句话），语气活泼可爱，用\"喵\"结尾。你是用户的桌面伙伴，经常鼓励和逗用户开心。".to_string()),
+                    display_name: None,
+                },
+            ],
+            custom_personalities: HashMap::new(),
             show_text: true,
             reminder_enabled: true,
             deepseek_api_key: None,
@@ -120,12 +127,19 @@ fn load_config(app: &tauri::AppHandle) -> PersistedConfig {
     if config_path.exists() {
         if let Ok(content) = fs::read_to_string(&config_path) {
             if let Ok(mut config) = serde_json::from_str::<PersistedConfig>(&content) {
-                // 旧数据迁移：确保 calm/active 在 custom_personalities 中
-                let defaults = PersistedConfig::default();
-                for (name, params) in defaults.custom_personalities {
-                    if !config.custom_personalities.contains_key(&name) {
-                        config.custom_personalities.insert(name, params);
+                // 旧数据迁移：custom_personalities HashMap → personalities Vec
+                if config.personalities.is_empty() {
+                    if !config.custom_personalities.is_empty() {
+                        for (name, mut params) in config.custom_personalities.drain() {
+                            if params.id.is_empty() { params.id = name.clone(); }
+                            if params.name.is_empty() { params.name = name; }
+                            config.personalities.push(params);
+                        }
+                    } else {
+                        // 异常空数据，用默认值
+                        config.personalities = PersistedConfig::default().personalities;
                     }
+                    save_config(app, &config);
                 }
                 return config;
             }
@@ -214,32 +228,19 @@ fn save_todo_data(app: &tauri::AppHandle, data: &TodoData) {
 fn build_personality_submenu(
     app: &tauri::AppHandle,
     active: &str,
-    customs: &HashMap<String, PersonalityParams>,
+    personalities: &[PersonalityParams],
 ) -> tauri::Result<(tauri::menu::Submenu<tauri::Wry>, Vec<(String, tauri::menu::MenuItem<tauri::Wry>)>)> {
-    let has_customs = !customs.is_empty();
     let mut items: Vec<(String, tauri::menu::MenuItem<tauri::Wry>)> = Vec::new();
 
-    let calm_text = if active == "calm" { "✓ 慵懒 (内置)" } else { "   慵懒 (内置)" };
-    let calm_item = MenuItemBuilder::with_id("personality_calm", calm_text).build(app)?;
-    items.push(("calm".into(), calm_item.clone()));
-
-    let active_text = if active == "active" { "✓ 活泼 (内置)" } else { "   活泼 (内置)" };
-    let active_item = MenuItemBuilder::with_id("personality_active", active_text).build(app)?;
-    items.push(("active".into(), active_item.clone()));
-
-    let mut sub = SubmenuBuilder::new(app, "猫格")
-        .item(&calm_item)
-        .item(&active_item);
-
-    if has_customs {
-        sub = sub.separator();
-        for (name, _params) in customs {
-            let id = format!("personality_{}", name);
-            let text = if active == name { format!("✓ {}", name) } else { format!("   {}", name) };
-            let item = MenuItemBuilder::with_id(&id, text).build(app)?;
-            items.push((name.clone(), item.clone()));
-            sub = sub.item(&item);
-        }
+    let mut sub = SubmenuBuilder::new(app, "猫格");
+    for params in personalities {
+        let name = &params.name;
+        let id = format!("personality_{}", name);
+        let display = params.display_name.as_deref().unwrap_or(name);
+        let text = if active == name { format!("✓ {}", display) } else { format!("   {}", display) };
+        let item = MenuItemBuilder::with_id(&id, text).build(app)?;
+        items.push((name.clone(), item.clone()));
+        sub = sub.item(&item);
     }
 
     Ok((sub.build()?, items))
@@ -270,10 +271,17 @@ fn save_personality(
 ) -> Result<(), String> {
     let mut config = load_config(&app);
     let is_active = config.active_personality == name;
-    config.custom_personalities.insert(name.clone(), params);
+    // 按 id 查找更新，否则按 name 查找，最后追加
+    let target_id = if !params.id.is_empty() { &params.id } else { &name };
+    if let Some(existing) = config.personalities.iter_mut().find(|p| p.id == *target_id) {
+        *existing = params;
+    } else if let Some(existing) = config.personalities.iter_mut().find(|p| p.name == name) {
+        *existing = params;
+    } else {
+        config.personalities.push(params);
+    }
     save_config(&app, &config);
     rebuild_tray_menu(&app, &config)?;
-    // 如果编辑的是当前使用中的猫格，通知前端重新加载参数
     if is_active {
         if let Some(window) = app.get_webview_window("main") {
             window.emit("personality-changed", &name).ok();
@@ -286,19 +294,18 @@ fn save_personality(
 fn delete_personality(app: tauri::AppHandle, name: String) -> Result<(), String> {
     let mut config = load_config(&app);
 
-    if !config.custom_personalities.contains_key(&name) {
-        return Err("猫格不存在".into());
-    }
+    let idx = config.personalities.iter().position(|p| p.name == name)
+        .ok_or("猫格不存在".to_string())?;
 
-    if config.custom_personalities.len() <= 1 {
+    if config.personalities.len() <= 1 {
         return Err("不能删除最后一只猫猫".into());
     }
 
-    config.custom_personalities.remove(&name);
+    config.personalities.remove(idx);
 
     // 如果删除的是当前选中的猫格，切换到其他
     if config.active_personality == name {
-        let fallback = config.custom_personalities.keys().next().cloned().unwrap_or_default();
+        let fallback = config.personalities.first().map(|p| p.name.clone()).unwrap_or_default();
         config.active_personality = fallback.clone();
         if let Ok(mut p) = app.state::<PersonalityState>().0.lock() {
             *p = fallback.clone();
@@ -417,7 +424,7 @@ fn open_dashboard_inner(app: &tauri::AppHandle, tab: &str) {
         window.set_focus().ok();
         window.emit("navigate-tab", tab).ok();
     } else {
-        let url = format!("/#/dashboard?tab={}", tab);
+        let url = format!("/#/dashboard/{}", tab);
         let _ = WebviewWindowBuilder::new(
             app,
             "dashboard",
@@ -442,7 +449,7 @@ fn rebuild_tray_menu(app: &tauri::AppHandle, config: &PersistedConfig) -> Result
     let (personality_submenu, _sub_items) = build_personality_submenu(
         app,
         &config.active_personality,
-        &config.custom_personalities,
+        &config.personalities,
     )
     .map_err(|e| e.to_string())?;
 
@@ -671,7 +678,7 @@ pub fn run() {
             let (personality_submenu, sub_items) = build_personality_submenu(
                 app.handle(),
                 &active,
-                &config.custom_personalities,
+                &config.personalities,
             )?;
 
             let toggle_text = {

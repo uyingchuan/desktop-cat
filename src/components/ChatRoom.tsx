@@ -11,7 +11,7 @@ import './ChatRoom.css';
 
 interface Config {
   active_personality: string;
-  custom_personalities: Record<string, PersonalityParams>;
+  personalities: PersonalityParams[];
   deepseek_api_key?: string;
 }
 
@@ -54,8 +54,8 @@ function speechesToRaw(custom?: Record<string, string[]>): Record<string, string
 }
 
 function getPersonalityParams(personality: string, config: Config | null): PersonalityParams {
-  return config?.custom_personalities[personality] || {
-    id: personality, activity: 50, sleepiness: 30, grooming: 30, playfulness: 40,
+  return config?.personalities.find(p => p.name === personality) || {
+    id: personality, name: personality, activity: 50, sleepiness: 30, grooming: 30, playfulness: 40,
   };
 }
 
@@ -65,9 +65,8 @@ function personalityDisplayLabel(name: string, config: Config | null): string {
   return name;
 }
 
-function ChatRoom({ personality }: { personality: string }) {
+function ChatRoom({ personality, mode = 'chat' }: { personality: string; mode?: 'chat' | 'settings' }) {
   const [config, setConfig] = useState<Config | null>(null);
-  const [view, setView] = useState<'chat' | 'settings'>('chat');
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -122,8 +121,20 @@ function ChatRoom({ personality }: { personality: string }) {
   }, [conversations, personality]);
 
   useEffect(() => {
-    if (!loading && view === 'chat') inputRef.current?.focus();
-  }, [loading, view]);
+    if (!loading && mode === 'chat') inputRef.current?.focus();
+  }, [loading, mode]);
+
+  // 直接导航到设置页时初始化表单
+  useEffect(() => {
+    if (mode === 'settings' && config) {
+      const params = getPersonalityParams(personality, config);
+      setSettingsDisplayName(params.displayName || '');
+      setSettingsParams(params);
+      setSettingsPrompt(params.systemPrompt || '');
+      setRawSpeeches(speechesToRaw(params.speeches));
+      setDirty(false);
+    }
+  }, [mode, personality, config]);
 
   // 手动保存设置
   const saveSettings = () => {
@@ -148,7 +159,6 @@ function ChatRoom({ personality }: { personality: string }) {
   };
 
   // 进入设置时初始化表单
-  // 进入设置时初始化表单
   const openSettings = () => {
     const params = getPersonalityParams(personality, config);
     setSettingsDisplayName(params.displayName || '');
@@ -157,11 +167,12 @@ function ChatRoom({ personality }: { personality: string }) {
     setRawSpeeches(speechesToRaw(params.speeches));
     setSettingsError('');
     setDirty(false);
-    setView('settings');
+    const id = params.id || personality;
+    window.location.hash = `#/dashboard/chat/${id}/settings`;
   };
 
   const getSystemPrompt = (name: string): string => {
-    const custom = config?.custom_personalities[name];
+    const custom = config?.personalities.find(p => p.name === name);
     return custom?.systemPrompt || DEFAULT_SYSTEM_PROMPT;
   };
 
@@ -211,11 +222,14 @@ function ChatRoom({ personality }: { personality: string }) {
   const currentMessages = conversations[personality] || [];
 
   // === 设置视图 ===
-  if (view === 'settings') {
+  if (mode === 'settings') {
     return (
       <div className="chat-room">
         <div className="chat-settings-header">
-          <button className="chat-back-btn" onClick={() => setView('chat')} title="返回">
+          <button className="chat-back-btn" onClick={() => {
+            const id = settingsParams.id || personality;
+            window.location.hash = `#/dashboard/chat/${id}`;
+          }} title="返回">
             ←
           </button>
           <span className="chat-settings-title">设置</span>
@@ -325,7 +339,8 @@ function ChatRoom({ personality }: { personality: string }) {
             onClick={() => {
               if (confirm('确定要清空当前猫格的所有对话记录吗？')) {
                 clearConversation(personality);
-                setView('chat');
+                const id = settingsParams.id || personality;
+                window.location.hash = `#/dashboard/chat/${id}`;
               }
             }}
           >
@@ -338,7 +353,8 @@ function ChatRoom({ personality }: { personality: string }) {
               if (!confirm(`确定要删除这只猫猫吗？${personality === 'calm' ? '将恢复内置默认设置。' : '此操作不可恢复。'}`)) return;
               invoke('delete_personality', { name: personality })
                 .then(() => {
-                  setView('chat');
+                  const id = settingsParams.id || personality;
+                  window.location.hash = `#/dashboard/chat/${id}`;
                   loadConfig();
                 })
                 .catch((e) => setSettingsError(String(e)));

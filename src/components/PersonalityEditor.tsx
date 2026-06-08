@@ -6,19 +6,15 @@ import './PersonalityEditor.css';
 
 interface Config {
   active_personality: string;
-  custom_personalities: Record<string, PersonalityParams>;
+  personalities: PersonalityParams[];
   show_text: boolean;
   reminder_enabled: boolean;
   deepseek_api_key?: string;
 }
 
 function personalityLabel(name: string, config: Config | null): string {
-  const params = name in (config?.custom_personalities || {})
-    ? config?.custom_personalities[name]
-    : null;
+  const params = config?.personalities.find(p => p.name === name);
   if (params?.displayName) return params.displayName;
-  if (name === 'calm') return '慵懒 (内置)';
-  if (name === 'active') return '活泼 (内置)';
   return name;
 }
 
@@ -73,7 +69,7 @@ function PersonalityEditor() {
   if (!config) return <div className="pe-container"><p>加载中...</p></div>;
 
   const activeName = config.active_personality;
-  const customs = config.custom_personalities || {};
+  const personalities = config.personalities || [];
 
   return (
     <div className="pe-container">
@@ -94,9 +90,9 @@ function PersonalityEditor() {
               value={activeName}
               onChange={(e) => switchPersonality(e.target.value)}
             >
-              {Object.keys(customs).map((name) => (
-                <option key={name} value={name}>
-                  {personalityLabel(name, config)}
+              {personalities.map((p) => (
+                <option key={p.id} value={p.name}>
+                  {personalityLabel(p.name, config)}
                 </option>
               ))}
             </select>

@@ -206,11 +206,10 @@ export function useCatBehavior() {
   const applyPersonality = (name: string) => {
     setPersonality(name);
     // 从 Rust 配置中获取参数
-    invoke<{ custom_personalities: Record<string, PersonalityParams> }>('get_config')
+    invoke<{ personalities: PersonalityParams[] }>('get_config')
       .then((config) => {
-        if (config.custom_personalities[name]) {
-          setPersonalityParams(config.custom_personalities[name]);
-        }
+        const found = config.personalities.find(p => p.name === name);
+        if (found) { setPersonalityParams(found); }
       })
       .catch(() => {});
   };
@@ -262,16 +261,15 @@ export function useCatBehavior() {
 
   // 启动时从 Rust 命令拉取持久化的猫格
   useEffect(() => {
-    invoke<{ active_personality: string; custom_personalities: Record<string, PersonalityParams>; show_text: boolean; reminder_enabled: boolean; deepseek_api_key?: string }>('get_config')
+    invoke<{ active_personality: string; personalities: PersonalityParams[]; show_text: boolean; reminder_enabled: boolean; deepseek_api_key?: string }>('get_config')
       .then((config) => {
         const name = config.active_personality;
         setPersonality(name);
         setShowText(config.show_text);
         setReminderEnabled(config.reminder_enabled);
         apiKeyRef.current = config.deepseek_api_key;
-        if (config.custom_personalities[name]) {
-          setPersonalityParams(config.custom_personalities[name]);
-        }
+        const found = config.personalities.find(p => p.name === name);
+        if (found) { setPersonalityParams(found); }
       })
       .catch(() => {});
   }, [setPersonality]);
