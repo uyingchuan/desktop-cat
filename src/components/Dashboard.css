@@ -65,6 +65,11 @@
   color: #fff;
 }
 
+.sidebar-add-btn .sidebar-tab-icon {
+  font-size: 24px;
+  font-weight: 300;
+}
+
 .sidebar-tab.active {
   background: rgba(7, 193, 96, 0.2);
   color: #07c160;

@@ -127,6 +127,15 @@ function Dashboard() {
               <span className="sidebar-tab-label">{p.label}</span>
             </button>
           ))}
+
+          {/* 新增按钮 */}
+          <button
+            className={`sidebar-tab sidebar-add-btn ${path === '/dashboard/new' ? 'active' : ''}`}
+            onClick={() => navigate('/dashboard/new')}
+            title="新增猫猫"
+          >
+            <span className="sidebar-tab-icon">+</span>
+          </button>
         </div>
 
         {/* 功能 tab */}
@@ -154,6 +163,7 @@ function Dashboard() {
         <Routes>
           <Route path="chat/:personalityId" element={<ChatRoute personalities={personalities} />} />
           <Route path="chat/:personalityId/settings" element={<ChatSettingsRoute personalities={personalities} />} />
+          <Route path="new" element={<NewCatPage onCreated={(name) => navigate(`/dashboard/chat/${name}`)} />} />
           <Route path="todo" element={<TodoPanel />} />
           <Route path="settings" element={<PersonalityEditor />} />
           <Route path="*" element={null} />
@@ -190,6 +200,135 @@ function ChatSettingsRoute({ personalities }: { personalities: PersonalityInfo[]
     return null;
   }
   return <ChatRoom personality={info.name} mode="settings" />;
+}
+
+function generateId(): string {
+  return 'custom_' + Math.random().toString(36).slice(2, 10);
+}
+
+const DEFAULT_SPEECHES: Record<string, string[]> = {
+  idle:   ['喵?', '嗯?', '什么声音?'],
+  walking:['走一走~', '溜达溜达', '散个步', '逛逛'],
+  running:['冲鸭!', '跑起来!', '追!'],
+  sleeping:['睡醒了...', '喵~好舒服', '伸个懒腰~'],
+  playing:['嘿!', '跳!', '喵!'],
+  floating:['飞起来~', '飘呀飘', '好轻盈'],
+  licking:['舔舔毛', '要干净', '美美的'],
+  attacking:['嗷呜!', '看爪!', '抓到你了!'],
+};
+
+const SPEECH_STATES = [
+  { key: 'idle', label: '待机' },
+  { key: 'walking', label: '走路' },
+  { key: 'running', label: '跑步' },
+  { key: 'sleeping', label: '睡醒' },
+  { key: 'licking', label: '舔毛' },
+  { key: 'playing', label: '跳跃' },
+  { key: 'floating', label: '漂浮' },
+  { key: 'attacking', label: '攻击' },
+];
+
+function speechesToRaw(custom?: Record<string, string[]>): Record<string, string> {
+  const raw: Record<string, string> = {};
+  for (const { key } of SPEECH_STATES) {
+    const src = custom?.[key]?.length ? custom[key] : (DEFAULT_SPEECHES[key] || []);
+    raw[key] = src.join('\n');
+  }
+  return raw;
+}
+
+function NewCatPage({ onCreated }: { onCreated: (name: string) => void }) {
+  const [displayName, setDisplayName] = useState('');
+  const [params, setParams] = useState({ activity: 50, sleepiness: 30, grooming: 30, playfulness: 40 });
+  const [systemPrompt, setSystemPrompt] = useState('');
+  const [rawSpeeches, setRawSpeeches] = useState<Record<string, string>>(speechesToRaw());
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const save = () => {
+    const name = displayName.trim() || '新猫猫';
+    const speeches: Record<string, string[]> = {};
+    for (const [k, v] of Object.entries(rawSpeeches)) {
+      const lines = v.split('\n').filter((l) => l.trim());
+      if (lines.length > 0) speeches[k] = lines;
+    }
+    const personalityParams = {
+      id: generateId(),
+      name,
+      ...params,
+      displayName: displayName.trim() || undefined,
+      systemPrompt: systemPrompt || undefined,
+      speeches: Object.keys(speeches).length > 0 ? speeches : undefined,
+    };
+    setSaving(true);
+    setError('');
+    invoke('save_personality', { name, params: personalityParams })
+      .then(() => {
+        onCreated(name);
+      })
+      .catch((e) => setError(String(e)))
+      .finally(() => setSaving(false));
+  };
+
+  return (
+    <div className="chat-room">
+      <div className="chat-settings-header">
+        <span className="chat-settings-title" style={{ flex: 1 }}>新增猫猫</span>
+        <button className="chat-save-btn" onClick={save} disabled={saving}>
+          {saving ? '...' : '创建'}
+        </button>
+      </div>
+      <div className="chat-settings-body">
+        {error && <div className="chat-settings-error">{error}</div>}
+
+        <div className="chat-settings-field">
+          <label>猫猫名称</label>
+          <input type="text" className="chat-settings-input" value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)} placeholder="给猫猫取个名字..." maxLength={20} />
+        </div>
+
+        <div className="chat-settings-field">
+          <label>活动度 <span className="chat-settings-val">{params.activity}</span></label>
+          <input type="range" min={0} max={100} value={params.activity}
+            onChange={(e) => setParams({ ...params, activity: Number(e.target.value) })} />
+        </div>
+        <div className="chat-settings-field">
+          <label>睡眠欲 <span className="chat-settings-val">{params.sleepiness}</span></label>
+          <input type="range" min={0} max={100} value={params.sleepiness}
+            onChange={(e) => setParams({ ...params, sleepiness: Number(e.target.value) })} />
+        </div>
+        <div className="chat-settings-field">
+          <label>舔毛欲 <span className="chat-settings-val">{params.grooming}</span></label>
+          <input type="range" min={0} max={100} value={params.grooming}
+            onChange={(e) => setParams({ ...params, grooming: Number(e.target.value) })} />
+        </div>
+        <div className="chat-settings-field">
+          <label>玩耍度 <span className="chat-settings-val">{params.playfulness}</span></label>
+          <input type="range" min={0} max={100} value={params.playfulness}
+            onChange={(e) => setParams({ ...params, playfulness: Number(e.target.value) })} />
+        </div>
+
+        <div className="chat-settings-field">
+          <label>个性提示词</label>
+          <textarea className="chat-settings-textarea" rows={4} value={systemPrompt}
+            onChange={(e) => setSystemPrompt(e.target.value)} placeholder="设置猫猫的角色设定..." />
+        </div>
+
+        <div className="chat-settings-section">
+          <label className="chat-settings-section-label">猫猫话术</label>
+          {SPEECH_STATES.map(({ key, label }) => (
+            <div key={key} className="chat-settings-field">
+              <label>{label}</label>
+              <textarea className="chat-settings-textarea" rows={3}
+                value={rawSpeeches[key] || ''}
+                onChange={(e) => setRawSpeeches({ ...rawSpeeches, [key]: e.target.value })}
+                placeholder={`输入${label}时的话术...`} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default Dashboard;
