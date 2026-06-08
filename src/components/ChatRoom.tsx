@@ -7,7 +7,7 @@ import { chatCompletion } from '../services/llm';
 import { extractMemories, formatMemoriesForPrompt } from '../services/memory';
 import type { PersonalityParams } from '../types/pet';
 import type { ChatMessage } from '../stores/useChatStore';
-import { BUILTIN_PARAMS, BUILTIN_PERSONALITIES } from '../types/pet';
+import { BUILTIN_PARAMS } from '../types/pet';
 import './ChatRoom.css';
 
 interface Config {
@@ -21,9 +21,8 @@ interface ChatData {
   conversations: Record<string, ChatMessage[]>;
 }
 
-function ChatRoom() {
+function ChatRoom({ personality }: { personality: string }) {
   const [config, setConfig] = useState<Config | null>(null);
-  const [activePersonality, setActivePersonality] = useState('');
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -39,7 +38,6 @@ function ChatRoom() {
     ])
       .then(([c, chatData]) => {
         setConfig(c);
-        setActivePersonality(c.active_personality);
         loadMemories(chatData.memories || {});
         loadConversations(chatData.conversations || {});
       })
@@ -47,13 +45,6 @@ function ChatRoom() {
   }, [loadMemories, loadConversations]);
 
   useEffect(() => { loadConfig(); }, [loadConfig]);
-
-  useEffect(() => {
-    const unlisten = listen<string>('personality-changed', (event) => {
-      setActivePersonality(event.payload);
-    });
-    return () => { unlisten.then((fn) => fn()); };
-  }, []);
 
   // 托盘闪烁时点击 → 重新加载对话
   useEffect(() => {
@@ -72,15 +63,11 @@ function ChatRoom() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [conversations, activePersonality]);
+  }, [conversations, personality]);
 
   useEffect(() => {
     if (!loading) inputRef.current?.focus();
   }, [loading]);
-
-  const allPersonalities = config
-    ? [...BUILTIN_PERSONALITIES, ...Object.keys(config.custom_personalities)]
-    : [];
 
   const getSystemPrompt = (name: string): string => {
     if (name in BUILTIN_PARAMS) {
@@ -100,31 +87,31 @@ function ChatRoom() {
 
     setInput('');
     setLoading(true);
-    addMessage(activePersonality, { role: 'user', content: text });
+    addMessage(personality, { role: 'user', content: text });
 
-    const myMemories = memories[activePersonality] || [];
-    const history = conversations[activePersonality] || [];
+    const myMemories = memories[personality] || [];
+    const history = conversations[personality] || [];
     const messages = [
-      { role: 'system' as const, content: getSystemPrompt(activePersonality) + formatMemoriesForPrompt(myMemories) },
+      { role: 'system' as const, content: getSystemPrompt(personality) + formatMemoriesForPrompt(myMemories) },
       ...history,
       { role: 'user' as const, content: text },
     ];
 
     try {
       const reply = await chatCompletion(messages, config.deepseek_api_key);
-      addMessage(activePersonality, { role: 'assistant', content: reply });
+      addMessage(personality, { role: 'assistant', content: reply });
 
       extractMemories(text, reply, myMemories, config.deepseek_api_key).then((newMemories) => {
         if (JSON.stringify(newMemories) !== JSON.stringify(myMemories)) {
-          updateMemories(activePersonality, newMemories);
+          updateMemories(personality, newMemories);
         }
       });
     } catch {
-      addMessage(activePersonality, { role: 'assistant', content: '呜...网络出问题了喵，等会儿再试吧~' });
+      addMessage(personality, { role: 'assistant', content: '呜...网络出问题了喵，等会儿再试吧~' });
     } finally {
       setLoading(false);
     }
-  }, [input, loading, config, activePersonality, memories, conversations, addMessage, updateMemories]);
+  }, [input, loading, config, personality, memories, conversations, addMessage, updateMemories]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -136,25 +123,17 @@ function ChatRoom() {
     [doSend],
   );
 
-  const currentMessages = conversations[activePersonality] || [];
+  const currentMessages = conversations[personality] || [];
 
   return (
     <div className="chat-room">
       <div className="chat-header">
-        <select
-          className="personality-select"
-          value={activePersonality}
-          onChange={(e) => setActivePersonality(e.target.value)}
-        >
-          {allPersonalities.map((name) => (
-            <option key={name} value={name}>
-              {name === 'calm' ? '慵懒 (内置)' : name === 'active' ? '活泼 (内置)' : name}
-            </option>
-          ))}
-        </select>
+        <span className="chat-header-title">
+          {personality === 'calm' ? '🐱 慵懒' : personality === 'active' ? '🐱 活泼' : `🐱 ${personality}`}
+        </span>
         <button
           className="clear-btn"
-          onClick={() => clearConversation(activePersonality)}
+          onClick={() => clearConversation(personality)}
         >
           清空对话
         </button>

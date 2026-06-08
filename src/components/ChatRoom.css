@@ -15,14 +15,11 @@
   border-bottom: 1px solid #e0e0e0;
 }
 
-.personality-select {
+.chat-header-title {
   flex: 1;
-  padding: 6px 8px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 13px;
-  background: #fff;
-  outline: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
 }
 
 .clear-btn {
