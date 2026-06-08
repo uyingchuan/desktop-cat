@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useChatStore } from '../stores/useChatStore';
@@ -66,6 +67,7 @@ function personalityDisplayLabel(name: string, config: Config | null): string {
 }
 
 function ChatRoom({ personality, mode = 'chat' }: { personality: string; mode?: 'chat' | 'settings' }) {
+  const navigate = useNavigate();
   const [config, setConfig] = useState<Config | null>(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -168,7 +170,7 @@ function ChatRoom({ personality, mode = 'chat' }: { personality: string; mode?: 
     setSettingsError('');
     setDirty(false);
     const id = params.id || personality;
-    window.location.hash = `#/dashboard/chat/${id}/settings`;
+    navigate(`/dashboard/chat/${id}/settings`);
   };
 
   const getSystemPrompt = (name: string): string => {
@@ -228,7 +230,7 @@ function ChatRoom({ personality, mode = 'chat' }: { personality: string; mode?: 
         <div className="chat-settings-header">
           <button className="chat-back-btn" onClick={() => {
             const id = settingsParams.id || personality;
-            window.location.hash = `#/dashboard/chat/${id}`;
+            navigate(`/dashboard/chat/${id}`, { replace: true });
           }} title="返回">
             ←
           </button>
@@ -340,7 +342,7 @@ function ChatRoom({ personality, mode = 'chat' }: { personality: string; mode?: 
               if (confirm('确定要清空当前猫格的所有对话记录吗？')) {
                 clearConversation(personality);
                 const id = settingsParams.id || personality;
-                window.location.hash = `#/dashboard/chat/${id}`;
+                navigate(`/dashboard/chat/${id}`, { replace: true });
               }
             }}
           >
@@ -354,7 +356,7 @@ function ChatRoom({ personality, mode = 'chat' }: { personality: string; mode?: 
               invoke('delete_personality', { name: personality })
                 .then(() => {
                   const id = settingsParams.id || personality;
-                  window.location.hash = `#/dashboard/chat/${id}`;
+                  navigate(`/dashboard/chat/${id}`, { replace: true });
                   loadConfig();
                 })
                 .catch((e) => setSettingsError(String(e)));
