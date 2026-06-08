@@ -76,9 +76,6 @@ struct PersistedConfig {
     active_personality: String,
     #[serde(default)]
     personalities: Vec<PersonalityParams>,
-    // 旧格式兼容
-    #[serde(default, skip_serializing)]
-    custom_personalities: HashMap<String, PersonalityParams>,
     #[serde(default = "default_true")]
     show_text: bool,
     #[serde(default = "default_true")]
@@ -95,23 +92,14 @@ impl Default for PersistedConfig {
             active_personality: "calm".to_string(),
             personalities: vec![
                 PersonalityParams {
-                    id: "calm".to_string(), name: "calm".to_string(),
+                    id: "calm".to_string(), name: "小橘".to_string(),
                     activity: 20, sleepiness: 70, grooming: 60, playfulness: 15,
                     speeches: None,
                     system_prompt: Some("你是一只慵懒安静的桌面猫猫。你喜欢睡觉和舔毛。回复要简短（1-2句话），语气温柔慵懒，带点傲娇，用\"喵\"结尾。你是用户的桌面伙伴，偶尔关心用户。".to_string()),
                     display_name: None,
                     last_chat_time: None,
                 },
-                PersonalityParams {
-                    id: "active".to_string(), name: "active".to_string(),
-                    activity: 70, sleepiness: 15, grooming: 20, playfulness: 65,
-                    speeches: None,
-                    system_prompt: Some("你是一只活泼好动的桌面猫猫。你喜欢跑跳、玩耍、抓东西。回复要简短（1-2句话），语气活泼可爱，用\"喵\"结尾。你是用户的桌面伙伴，经常鼓励和逗用户开心。".to_string()),
-                    display_name: None,
-                    last_chat_time: None,
-                },
             ],
-            custom_personalities: HashMap::new(),
             show_text: true,
             reminder_enabled: true,
             todo_reminder_enabled: true,
@@ -133,25 +121,12 @@ fn load_config(app: &tauri::AppHandle) -> PersistedConfig {
     let config_path = config_dir.join("config.json");
     if config_path.exists() {
         if let Ok(content) = fs::read_to_string(&config_path) {
-            if let Ok(mut config) = serde_json::from_str::<PersistedConfig>(&content) {
-                // 旧数据迁移：custom_personalities HashMap → personalities Vec
-                if config.personalities.is_empty() {
-                    if !config.custom_personalities.is_empty() {
-                        for (name, mut params) in config.custom_personalities.drain() {
-                            if params.id.is_empty() { params.id = name.clone(); }
-                            if params.name.is_empty() { params.name = name; }
-                            config.personalities.push(params);
-                        }
-                    } else {
-                        // 异常空数据，用默认值
-                        config.personalities = PersistedConfig::default().personalities;
-                    }
-                    save_config(app, &config);
-                }
+            if let Ok(config) = serde_json::from_str::<PersistedConfig>(&content) {
                 return config;
             }
         }
     }
+    // 首次启动：仅内置慵懒猫格
     PersistedConfig::default()
 }
 

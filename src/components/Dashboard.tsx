@@ -64,11 +64,6 @@ function Dashboard() {
     });
   }, [conversations]);
 
-  useEffect(() => {
-    const unlisten = listen('personality-list-changed', () => loadPersonalities());
-    return () => { unlisten.then((fn) => fn()); };
-  }, [loadPersonalities]);
-
   useEffect(() => { loadPersonalities(); }, [loadPersonalities]);
 
   useEffect(() => {
@@ -238,15 +233,15 @@ function speechesToRaw(custom?: Record<string, string[]>): Record<string, string
 }
 
 function NewCatPage({ onCreated }: { onCreated: (name: string) => void }) {
-  const [displayName, setDisplayName] = useState('');
-  const [params, setParams] = useState({ activity: 50, sleepiness: 30, grooming: 30, playfulness: 40 });
-  const [systemPrompt, setSystemPrompt] = useState('');
+  const [displayName, setDisplayName] = useState('小橘');
+  const [params, setParams] = useState({ activity: 20, sleepiness: 70, grooming: 60, playfulness: 15 });
+  const [systemPrompt, setSystemPrompt] = useState('你是一只慵懒安静的桌面猫猫。你喜欢睡觉和舔毛。回复要简短（1-2句话），语气温柔慵懒，带点傲娇，用"喵"结尾。你是用户的桌面伙伴，偶尔关心用户。');
   const [rawSpeeches, setRawSpeeches] = useState<Record<string, string>>(speechesToRaw());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const save = () => {
-    const name = displayName.trim() || '新猫猫';
+    const name = displayName.trim() || '小橘';
     const speeches: Record<string, string[]> = {};
     for (const [k, v] of Object.entries(rawSpeeches)) {
       const lines = v.split('\n').filter((l) => l.trim());
