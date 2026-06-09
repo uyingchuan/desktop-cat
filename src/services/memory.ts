@@ -21,6 +21,9 @@ export async function extractMemories(
     trigger_at: m.trigger_at,
   }));
 
+  const nowUnix = Math.floor(Date.now() / 1000);
+  const nowStr = new Date(nowUnix * 1000).toLocaleString('zh-CN', { hour12: false });
+
   const systemPrompt = `You are a precise memory extraction system for a desktop cat companion app. Your job: maintain a structured list of facts about the user that the cat should remember.
 
 Given the EXISTING memories (JSON array) and the latest conversation exchange, output a COMPLETE updated JSON array. Each memory object:
@@ -42,17 +45,23 @@ Examples:
 ## "event" — 时间相关事件
 The user mentions something that is tied to a specific time: upcoming plans, things that happened, deadlines.
 If the user explicitly asks to be REMINDED at a specific future time, include trigger_at as a Unix timestamp (seconds).
-Examples:
-  用户说"明天有个面试" → {"type":"event","content":"用户明天有面试","importance":9}
-  用户说"下周要出差" → {"type":"event","content":"用户下周出差","importance":8}
-  用户说"今天加班到很晚" → {"type":"event","content":"用户今天加班","importance":6}
-  用户说"刚开完一个长会" → {"type":"event","content":"用户刚开完长会","importance":4}
-  用户说"明天早上8点提醒我开会" (now is 2026-06-08 22:00)
-    → {"type":"event","content":"用户明天早上8点要开会","importance":9,"trigger_at":1749427200}
-  用户说"下午3点提醒我交周报" (now is 2026-06-08 10:00)
-    → {"type":"event","content":"用户今天下午3点要交周报","importance":8,"trigger_at":1749438000}
-  IMPORTANT: only set trigger_at when user EXPLICITLY asks for a reminder ("提醒我"/"remember"/"remind me").
-  Do NOT set trigger_at for plain event mentions without a reminder request.
+
+CURRENT TIME for your calculations: ${nowStr}, Unix timestamp = ${nowUnix}
+
+HOW TO COMPUTE trigger_at from the CURRENT TIME:
+- "X分钟后" → trigger_at = ${nowUnix} + (X * 60). Example: "两分钟后提醒我" → trigger_at = ${nowUnix} + 120 = ${nowUnix + 120}
+- "X小时后" → trigger_at = ${nowUnix} + (X * 3600). Example: "半小时后提醒我" → trigger_at = ${nowUnix} + 1800 = ${nowUnix + 1800}
+- "明天早上8点" → compute the Unix timestamp for tomorrow 08:00 CST
+- "下午3点" → compute the Unix timestamp for today/tomorrow 15:00 CST
+
+Examples (based on CURRENT TIME ${nowStr}, unix=${nowUnix}):
+  "明天有个面试" → {"type":"event","content":"用户明天有面试","importance":9}
+  "明天早上8点提醒我开会" → {"type":"event","content":"用户明天早上8点要开会","importance":9,"trigger_at":${nowUnix + 36000}}
+  "两分钟后提醒我喝水" → {"type":"event","content":"用户两分钟后要喝水","importance":7,"trigger_at":${nowUnix + 120}}
+  "半小时后提醒我开会" → {"type":"event","content":"用户半小时后要开会","importance":8,"trigger_at":${nowUnix + 1800}}
+
+IMPORTANT: only set trigger_at when user EXPLICITLY asks for a reminder ("提醒我"/"remember"/"remind me").
+Do NOT set trigger_at for plain event mentions without a reminder request.
 
 ## "preference" — 用户喜好/习惯
 The user expresses what they LIKE, DISLIKE, PREFER, or HABITUALLY do. Must have clear sentiment or habitual pattern.
@@ -85,6 +94,7 @@ Examples:
 - Maximum 50 facts total. If over limit, drop the least important ones.
 - Output ONLY the JSON array, nothing else. No markdown, no explanation.`;
 
+  console.log(systemPrompt, nowUnix);
   try {
     const res = await fetch(`${DEEPSEEK_BASE}/v1/chat/completions`, {
       method: 'POST',
@@ -99,7 +109,7 @@ Examples:
           { role: 'system', content: systemPrompt },
           {
             role: 'user',
-            content: `Existing memories:\n${JSON.stringify(existingList)}\n\nLatest exchange:\nUser: ${userMessage}\nAssistant: ${assistantReply}\n\nOutput the complete updated memory array:`,
+            content: `Current time: ${nowStr} (Unix: ${nowUnix})\n\nExisting memories:\n${JSON.stringify(existingList)}\n\nLatest exchange:\nUser: ${userMessage}\nAssistant: ${assistantReply}\n\nOutput the complete updated memory array:`,
           },
         ],
       }),
@@ -114,15 +124,15 @@ Examples:
     if (match) {
       const parsed = JSON.parse(match[0]);
       if (Array.isArray(parsed)) {
-        const now = Math.floor(Date.now() / 1000);
+        console.log(parsed);
         return parsed.slice(0, 50).map((item: Record<string, unknown>) => ({
           id: (item.id as string) || crypto.randomUUID(),
           personality,
           content: item.content as string || '',
           memory_type: (item.type as MemoryItemV2['memory_type']) || 'fact',
           importance: Math.min(10, Math.max(1, (item.importance as number) || 5)),
-          created_at: (item.created_at as number) || now,
-          last_referenced_at: now,
+          created_at: (item.created_at as number) || nowUnix,
+          last_referenced_at: nowUnix,
           trigger_at: (item.trigger_at as number) || undefined,
         }));
       }

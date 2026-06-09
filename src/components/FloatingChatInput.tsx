@@ -5,6 +5,7 @@ import { useChatStore } from '../stores/useChatStore';
 import { useCompanionStore } from '../stores/useCompanionStore';
 import { chatCompletion } from '../services/llm';
 import { extractMemories, formatMemoriesForPrompt } from '../services/memory';
+import { buildStatePrompt, calcReplyDelay } from '../services/statePrompt';
 import type { PersonalityParams } from '../types/pet';
 import type { ChatMessage } from '../stores/useChatStore';
 import type { MemoryItemV2 } from '../types/companion';
@@ -74,18 +75,31 @@ function FloatingChatInput() {
     addMessage(personality, { role: 'user', content: text });
 
     // 记录互动（关系系统）
-    useCompanionStore.getState().recordInteraction(personality);
+    const companionStore = useCompanionStore.getState();
+    companionStore.recordInteraction(personality);
+
+    // 读取内部状态 + 关系，生成动态修饰指令
+    const internalState = companionStore.internal_states[personality];
+    const relationship = companionStore.relationships[personality];
+    const statePrompt = buildStatePrompt(internalState, relationship);
 
     const myMemories = getPersonalityMemoriesV2(personality);
     const history = conversations[personality] || [];
     const messages = [
-      { role: 'system' as const, content: systemPrompt + formatMemoriesForPrompt(myMemories) },
+      { role: 'system' as const, content: systemPrompt + statePrompt + formatMemoriesForPrompt(myMemories) },
       ...history,
       { role: 'user' as const, content: text },
     ];
 
     try {
       const reply = await chatCompletion(messages, apiKey);
+
+      // 状态型延迟：LLM 已生成回复，但猫太困/太累，等 N 秒再显示
+      const delay = calcReplyDelay(internalState);
+      if (delay > 0) {
+        await new Promise(r => setTimeout(r, delay));
+      }
+
       addMessage(personality, { role: 'assistant', content: reply });
       setSpeech(reply);
 
@@ -100,6 +114,7 @@ function FloatingChatInput() {
             content: m.content,
             memory_type: m.memory_type,
             importance: m.importance,
+            trigger_at: m.trigger_at
           }));
         }
       });
